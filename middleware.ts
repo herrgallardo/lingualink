@@ -33,7 +33,23 @@ export async function middleware(request: NextRequest) {
   });
 
   // Refresh session if expired
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Protected routes
+  if (request.nextUrl.pathname.startsWith('/chat') && !user) {
+    return NextResponse.redirect(new URL('/auth/login', request.url));
+  }
+
+  // Redirect authenticated users away from auth pages
+  if (
+    request.nextUrl.pathname.startsWith('/auth/') &&
+    user &&
+    !request.nextUrl.pathname.includes('/callback')
+  ) {
+    return NextResponse.redirect(new URL('/chat', request.url));
+  }
 
   return supabaseResponse;
 }
@@ -42,12 +58,11 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api/auth (auth endpoints)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

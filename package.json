@@ -15,6 +15,7 @@
     "db:types": "supabase gen types typescript --project-ref $SUPABASE_PROJECT_REF > lib/types/database.generated.ts"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.50.0",
     "next": "15.3.3",

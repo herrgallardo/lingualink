@@ -1,6 +1,20 @@
+'use client';
+
 import { SupabaseTest } from '@/components/SupabaseTest';
+import { useAuth } from '@/lib/context/auth-context';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/chat');
+    }
+  }, [user, loading, router]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Supabase Connection Test */}
@@ -13,6 +27,22 @@ export default function Home() {
         <div className="container mx-auto px-4 py-16">
           <h1 className="text-5xl font-bold mb-4">LinguaLink</h1>
           <p className="text-xl opacity-90">Real-time AI-powered translation chat application</p>
+          {!loading && !user && (
+            <div className="flex gap-4 mt-6">
+              <a
+                href="/auth/login"
+                className="px-6 py-3 bg-white text-bright-cyan rounded-lg font-medium hover:opacity-90 transition-all"
+              >
+                Sign In
+              </a>
+              <a
+                href="/auth/signup"
+                className="px-6 py-3 bg-transparent border-2 border-white text-white rounded-lg font-medium hover:bg-white hover:bg-opacity-10 transition-all"
+              >
+                Sign Up
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
