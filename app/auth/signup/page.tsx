@@ -32,14 +32,14 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="bg-surface p-8 rounded-lg shadow-lg animate-fade-in">
+    <div className="bg-white dark:bg-slate-800 p-8 rounded-lg shadow-lg animate-fade-in">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Create Account</h1>
-        <p className="text-secondary">Join LinguaLink to start chatting</p>
+        <h1 className="text-3xl font-bold text-cyan-600 mb-2">Create Account</h1>
+        <p className="text-teal-700 dark:text-teal-400">Join LinguaLink to start chatting</p>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -59,10 +59,10 @@ export default function SignUpPage() {
       <div className="mt-6">
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-default"></div>
+            <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-surface text-muted">Or continue with</span>
+            <span className="px-2 bg-white dark:bg-slate-800 text-slate-500">Or continue with</span>
           </div>
         </div>
 
@@ -71,9 +71,9 @@ export default function SignUpPage() {
         </div>
       </div>
 
-      <p className="mt-8 text-center text-sm text-secondary">
+      <p className="mt-8 text-center text-sm text-teal-700 dark:text-teal-400">
         Already have an account?{' '}
-        <Link href="/auth/login" className="font-medium text-primary hover:text-primary-hover">
+        <Link href="/auth/login" className="font-medium text-cyan-600 hover:text-cyan-500">
           Sign in
         </Link>
       </p>

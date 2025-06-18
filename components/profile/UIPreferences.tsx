@@ -52,24 +52,26 @@ export function UIPreferences({ preferences, onPreferenceChange }: UIPreferences
 
   return (
     <div className="space-y-1">
-      <h3 className="text-lg font-semibold text-primary mb-4">UI Preferences</h3>
+      <h3 className="text-lg font-semibold text-midnight-900 dark:text-slate-100 mb-4">
+        UI Preferences
+      </h3>
 
       <div className="space-y-4">
         {preferenceItems.map((item) => (
           <div
             key={item.key}
-            className="flex items-start justify-between p-3 rounded-lg hover:bg-background-secondary transition-colors"
+            className="flex items-start justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
             <div className="flex items-start gap-3 flex-1">
-              <div className="text-muted mt-0.5">{item.icon}</div>
+              <div className="text-slate-500 mt-0.5">{item.icon}</div>
               <div className="flex-1">
                 <label
                   htmlFor={item.key}
-                  className="text-sm font-medium text-primary cursor-pointer"
+                  className="text-sm font-medium text-midnight-900 dark:text-slate-100 cursor-pointer"
                 >
                   {item.label}
                 </label>
-                <p className="text-xs text-muted mt-0.5">{item.description}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
               </div>
             </div>
             <Switch

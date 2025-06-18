@@ -29,12 +29,15 @@ export const AuthForm = ({
     <form onSubmit={onSubmit} className="space-y-4">
       {mode === 'signup' && onUsernameChange && (
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-primary mb-1">
+          <label
+            htmlFor="username"
+            className="block text-sm font-medium text-midnight-900 dark:text-slate-100 mb-1"
+          >
             Username
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <UserIcon className="h-5 w-5 text-muted" />
+              <UserIcon className="h-5 w-5 text-slate-500" />
             </div>
             <input
               id="username"
@@ -44,7 +47,7 @@ export const AuthForm = ({
               required
               value={username}
               onChange={(e) => onUsernameChange(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-default rounded-lg bg-background text-primary placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="block w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-midnight-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
               placeholder="Choose a username"
               disabled={loading}
             />
@@ -53,12 +56,15 @@ export const AuthForm = ({
       )}
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-primary mb-1">
+        <label
+          htmlFor="email"
+          className="block text-sm font-medium text-midnight-900 dark:text-slate-100 mb-1"
+        >
           Email
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <EnvelopeIcon className="h-5 w-5 text-muted" />
+            <EnvelopeIcon className="h-5 w-5 text-slate-500" />
           </div>
           <input
             id="email"
@@ -68,7 +74,7 @@ export const AuthForm = ({
             required
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-default rounded-lg bg-background text-primary placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="block w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-midnight-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             placeholder="Enter your email"
             disabled={loading}
           />
@@ -76,12 +82,15 @@ export const AuthForm = ({
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-primary mb-1">
+        <label
+          htmlFor="password"
+          className="block text-sm font-medium text-midnight-900 dark:text-slate-100 mb-1"
+        >
           Password
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <LockClosedIcon className="h-5 w-5 text-muted" />
+            <LockClosedIcon className="h-5 w-5 text-slate-500" />
           </div>
           <input
             id="password"
@@ -91,14 +100,14 @@ export const AuthForm = ({
             required
             value={password}
             onChange={(e) => onPasswordChange(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-default rounded-lg bg-background text-primary placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="block w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-midnight-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             placeholder={mode === 'signup' ? 'Create a password' : 'Enter your password'}
             minLength={8}
             disabled={loading}
           />
         </div>
         {mode === 'signup' && (
-          <p className="mt-1 text-xs text-muted">Must be at least 8 characters</p>
+          <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters</p>
         )}
       </div>
 

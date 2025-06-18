@@ -86,7 +86,7 @@ export function AvatarUpload({
     <div className="flex flex-col items-center">
       <div className="relative group">
         <div
-          className={`${sizeClasses[size]} rounded-full overflow-hidden bg-surface border-2 border-default group-hover:border-primary transition-colors relative`}
+          className={`${sizeClasses[size]} rounded-full overflow-hidden bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 group-hover:border-cyan-500 transition-colors relative`}
         >
           {currentAvatarUrl ? (
             <Image
@@ -98,7 +98,7 @@ export function AvatarUpload({
               priority
             />
           ) : (
-            <UserCircleIcon className="w-full h-full text-muted" />
+            <UserCircleIcon className="w-full h-full text-slate-400" />
           )}
         </div>
 
@@ -127,9 +127,9 @@ export function AvatarUpload({
         aria-label="Avatar file input"
       />
 
-      {error && <p className="mt-2 text-sm text-error">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <p className="mt-2 text-xs text-muted">Max 2MB • JPEG, PNG, GIF, or WebP</p>
+      <p className="mt-2 text-xs text-slate-500">Max 2MB • JPEG, PNG, GIF, or WebP</p>
     </div>
   );
 }

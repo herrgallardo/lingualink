@@ -71,32 +71,32 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-secondary">Loading profile...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto"></div>
+          <p className="mt-4 text-teal-700 dark:text-teal-400">Loading profile...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-slate-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/chat')}
-              className="p-2 hover:bg-surface rounded-lg transition-colors"
+              className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
               aria-label="Back to chat"
             >
-              <ArrowLeftIcon className="w-5 h-5 text-primary" />
+              <ArrowLeftIcon className="w-5 h-5 text-cyan-600" />
             </button>
-            <h1 className="text-3xl font-bold text-primary">Profile Settings</h1>
+            <h1 className="text-3xl font-bold text-cyan-600">Profile Settings</h1>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg text-error">
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
@@ -105,8 +105,10 @@ export default function ProfilePage() {
           {/* Left Column */}
           <div className="space-y-8">
             {/* Avatar Section */}
-            <div className="bg-surface rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-primary mb-6">Profile Picture</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
+                Profile Picture
+              </h2>
               <AvatarUpload
                 userId={user.id}
                 currentAvatarUrl={avatarUrl}
@@ -117,22 +119,30 @@ export default function ProfilePage() {
             </div>
 
             {/* Account Info */}
-            <div className="bg-surface rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-primary mb-6">Account Information</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
+                Account Information
+              </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">Username</label>
-                  <p className="text-primary font-medium">{profile.username}</p>
+                  <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
+                    Username
+                  </label>
+                  <p className="text-midnight-900 dark:text-slate-100 font-medium">
+                    {profile.username}
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">Email</label>
-                  <p className="text-primary">{profile.email}</p>
+                  <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
+                    Email
+                  </label>
+                  <p className="text-midnight-900 dark:text-slate-100">{profile.email}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">
+                  <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
                     Member Since
                   </label>
-                  <p className="text-primary">
+                  <p className="text-midnight-900 dark:text-slate-100">
                     {new Date(profile.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -143,8 +153,10 @@ export default function ProfilePage() {
           {/* Right Column */}
           <div className="space-y-8">
             {/* Communication Preferences */}
-            <div className="bg-surface rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-primary mb-6">Communication Preferences</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
+                Communication Preferences
+              </h2>
               <div className="space-y-6">
                 <LanguageSelector
                   selectedLanguage={preferredLanguage}
@@ -157,7 +169,7 @@ export default function ProfilePage() {
             </div>
 
             {/* UI Preferences */}
-            <div className="bg-surface rounded-lg shadow-md p-6">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
               <UIPreferences preferences={preferences} onPreferenceChange={updatePreference} />
             </div>
           </div>
@@ -166,7 +178,7 @@ export default function ProfilePage() {
         {/* Save Button */}
         <div className="mt-8 flex items-center justify-end gap-4">
           {showSaveSuccess && (
-            <div className="flex items-center gap-2 text-success animate-fade-in">
+            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 animate-fade-in">
               <CheckIcon className="w-5 h-5" />
               <span>Profile saved successfully!</span>
             </div>
