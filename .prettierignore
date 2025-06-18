@@ -1,0 +1,7 @@
+.next
+node_modules
+public
+.env*
+package-lock.json
+coverage
+.vercel
