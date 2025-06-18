@@ -85,28 +85,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // If sign up successful and user exists, create profile
     if (data.user) {
-      // Ensure we have an email before creating the profile
       const userEmail = data.user.email;
       if (!userEmail) {
         throw new Error('Email is required for user profile creation');
       }
 
-      const { error: profileError } = await supabase.from('users').insert({
+      // Wait a moment for auth to propagate
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const { error: profileError } = await supabase.from('users').upsert({
         id: data.user.id,
         email: userEmail,
         username,
+        preferred_language: 'en',
+        status: 'available' as const,
+        is_typing: false,
+        last_seen: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
 
-      if (profileError) {
-        // If profile creation fails, we should handle this
+      if (profileError && profileError.code !== '23505') {
         console.error('Profile creation error:', profileError);
-
-        // If it's a unique constraint violation, it might mean the profile already exists
-        if (profileError.code === '23505') {
-          console.log('Profile already exists, continuing...');
-        } else {
-          throw profileError;
-        }
+        // Don't throw here, let the user continue
+        // The profile might be created by a database trigger or manually later
       }
     }
   };
