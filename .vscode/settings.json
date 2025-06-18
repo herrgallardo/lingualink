@@ -1,6 +1,11 @@
 {
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[sql]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": null
+  },
+  "mssql.intelliSense.enableIntelliSense": false,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit",
     "source.organizeImports": "explicit"
@@ -18,5 +23,8 @@
     "**/bower_components": true,
     "**/*.code-search": true,
     "**/.next": true
+  },
+  "files.associations": {
+    "*.sql": "sql"
   }
 }

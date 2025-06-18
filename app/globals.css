@@ -324,10 +324,22 @@
   .p-4 {
     padding: var(--spacing-4);
   }
+  .pl-4 {
+    padding-left: var(--spacing-4);
+  }
   .mb-2 {
     margin-bottom: var(--spacing-2);
   }
   .mt-2 {
+    margin-top: var(--spacing-2);
+  }
+  .mt-4 {
+    margin-top: var(--spacing-4);
+  }
+  .space-y-1 > * + * {
+    margin-top: var(--spacing-1);
+  }
+  .space-y-2 > * + * {
     margin-top: var(--spacing-2);
   }
 

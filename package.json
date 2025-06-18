@@ -10,7 +10,9 @@
     "lint:fix": "next lint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:verify": "tsx scripts/verify-database.ts",
+    "db:types": "supabase gen types typescript --project-ref $SUPABASE_PROJECT_REF > lib/types/database.generated.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
@@ -25,11 +27,13 @@
     "@types/node": "^20.19.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.5.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
     "eslint-config-prettier": "^10.1.5",
     "prettier": "^3.5.3",
     "tailwindcss": "^4",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }
