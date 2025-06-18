@@ -94,3 +94,6 @@ export function isValidLanguageCode(code: string): code is LanguageCode {
 export function isValidUserStatus(status: string): status is UserStatus {
   return ['available', 'busy', 'do-not-disturb', 'invisible'].includes(status);
 }
+
+// Re-export theme types
+export * from './theme';

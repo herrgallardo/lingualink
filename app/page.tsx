@@ -1,83 +1,125 @@
-import Image from 'next/image';
-
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{' '}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-background">
+      {/* Hero Section with Gradient */}
+      <div className="gradient-mint-to-cyan text-white">
+        <div className="container mx-auto px-4 py-16">
+          <h1 className="text-5xl font-bold mb-4">LinguaLink</h1>
+          <p className="text-xl opacity-90">Real-time AI-powered translation chat application</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/file.svg" alt="File icon" width={16} height={16} />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/window.svg" alt="Window icon" width={16} height={16} />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+
+      {/* Color Palette Showcase */}
+      <div className="container mx-auto px-4 py-12">
+        <h2 className="text-3xl font-semibold text-primary mb-8">Color Palette</h2>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-12">
+          <div className="text-center">
+            <div className="bg-light-mint-green h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Light Mint Green</p>
+            <p className="text-xs text-muted">#80ee98</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-aqua-green h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Aqua Green</p>
+            <p className="text-xs text-muted">#46dfb1</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-bright-cyan h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Bright Cyan</p>
+            <p className="text-xs text-muted">#09d1c7</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-teal-blue h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Teal Blue</p>
+            <p className="text-xs text-muted">#15919b</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-deep-teal h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Deep Teal</p>
+            <p className="text-xs text-muted">#0c6478</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-midnight-blue h-24 rounded-lg shadow-md mb-2"></div>
+            <p className="text-sm font-medium">Midnight Blue</p>
+            <p className="text-xs text-muted">#213a58</p>
+          </div>
+        </div>
+
+        {/* Gradients */}
+        <h3 className="text-2xl font-semibold text-secondary mb-4">Gradients</h3>
+        <div className="space-y-4 mb-12">
+          <div className="gradient-mint-to-cyan h-20 rounded-lg shadow-md"></div>
+          <div className="gradient-cyan-to-midnight h-20 rounded-lg shadow-md"></div>
+          <div className="gradient-full-spectrum h-20 rounded-lg shadow-md"></div>
+        </div>
+
+        {/* Typography */}
+        <h3 className="text-2xl font-semibold text-secondary mb-4">Typography</h3>
+        <div className="space-y-4 mb-12 bg-surface p-6 rounded-lg border border-default">
+          <h1 className="text-5xl font-bold text-primary">Heading 1</h1>
+          <h2 className="text-4xl font-semibold text-primary">Heading 2</h2>
+          <h3 className="text-3xl font-semibold text-primary">Heading 3</h3>
+          <h4 className="text-2xl font-medium text-primary">Heading 4</h4>
+          <p className="text-base text-primary">
+            This is a paragraph with primary text color. LinguaLink enables seamless communication
+            across language barriers.
+          </p>
+          <p className="text-sm text-secondary">
+            This is secondary text, perfect for descriptions and supporting content.
+          </p>
+          <p className="text-xs text-muted">
+            This is muted text, ideal for timestamps and metadata.
+          </p>
+        </div>
+
+        {/* Buttons Example */}
+        <h3 className="text-2xl font-semibold text-secondary mb-4">Components Preview</h3>
+        <div className="space-y-4 bg-surface p-6 rounded-lg border border-default">
+          <div className="flex flex-wrap gap-4">
+            <button className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors">
+              Primary Button
+            </button>
+            <button className="px-6 py-2 bg-secondary text-white rounded-lg hover:bg-secondary-hover transition-colors">
+              Secondary Button
+            </button>
+            <button className="px-6 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors">
+              Accent Button
+            </button>
+            <button className="px-6 py-2 border-2 border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors">
+              Outline Button
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+            <div className="p-4 bg-background-secondary rounded-lg border border-default">
+              <h4 className="font-semibold text-primary mb-2">Card Title</h4>
+              <p className="text-sm text-secondary">
+                This is a card component using our design system colors.
+              </p>
+            </div>
+            <div className="p-4 bg-surface rounded-lg shadow-md hover:shadow-lg transition-shadow">
+              <h4 className="font-semibold text-primary mb-2">Elevated Card</h4>
+              <p className="text-sm text-secondary">This card has a shadow for elevation.</p>
+            </div>
+            <div className="p-4 gradient-mint-to-cyan text-white rounded-lg">
+              <h4 className="font-semibold mb-2">Gradient Card</h4>
+              <p className="text-sm opacity-90">This card uses our gradient background.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Animation Examples */}
+        <h3 className="text-2xl font-semibold text-secondary mb-4 mt-12">Animations</h3>
+        <div className="flex gap-4">
+          <div className="animate-fade-in p-4 bg-primary text-white rounded-lg">
+            Fade In Animation
+          </div>
+          <div className="animate-slide-up p-4 bg-secondary text-white rounded-lg">
+            Slide Up Animation
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
