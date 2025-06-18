@@ -217,6 +217,12 @@
   .bg-accent {
     background-color: var(--color-accent);
   }
+  .bg-success {
+    background-color: var(--color-success);
+  }
+  .bg-error {
+    background-color: var(--color-error);
+  }
   .bg-light-mint-green {
     background-color: var(--color-light-mint-green);
   }
@@ -246,6 +252,12 @@
   .text-muted {
     color: var(--color-text-muted);
   }
+  .text-success {
+    color: var(--color-success);
+  }
+  .text-error {
+    color: var(--color-error);
+  }
   .text-bright-cyan {
     color: var(--color-bright-cyan);
   }
@@ -254,6 +266,99 @@
   }
   .text-midnight-blue {
     color: var(--color-midnight-blue);
+  }
+
+  /* Layout utilities */
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      max-width: 640px;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .container {
+      max-width: 768px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      max-width: 1024px;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .container {
+      max-width: 1280px;
+    }
+  }
+
+  /* Size utilities */
+  .w-3 {
+    width: 0.75rem;
+  }
+  .h-3 {
+    height: 0.75rem;
+  }
+
+  /* Flexbox utilities */
+  .flex {
+    display: flex;
+  }
+  .items-center {
+    align-items: center;
+  }
+  .gap-2 {
+    gap: var(--spacing-2);
+  }
+
+  /* Spacing utilities */
+  .p-4 {
+    padding: var(--spacing-4);
+  }
+  .mb-2 {
+    margin-bottom: var(--spacing-2);
+  }
+  .mt-2 {
+    margin-top: var(--spacing-2);
+  }
+
+  /* Text size utilities */
+  .text-xs {
+    font-size: var(--font-size-xs);
+  }
+  .text-sm {
+    font-size: var(--font-size-sm);
+  }
+  .text-base {
+    font-size: var(--font-size-base);
+  }
+
+  /* Font weight utilities */
+  .font-medium {
+    font-weight: var(--font-weight-medium);
+  }
+  .font-semibold {
+    font-weight: var(--font-weight-semibold);
+  }
+  .font-bold {
+    font-weight: var(--font-weight-bold);
+  }
+
+  /* Border radius utilities */
+  .rounded-full {
+    border-radius: var(--radius-full);
+  }
+  .rounded-lg {
+    border-radius: var(--radius-lg);
   }
 
   /* Opacity utilities */
@@ -290,6 +395,10 @@
   }
 
   /* Border utilities */
+  .border {
+    border-width: 1px;
+    border-style: solid;
+  }
   .border-default {
     border-color: var(--color-border);
   }

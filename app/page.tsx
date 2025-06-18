@@ -1,6 +1,13 @@
+import { SupabaseTest } from '@/components/SupabaseTest';
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-background">
+      {/* Supabase Connection Test */}
+      <div className="container mx-auto px-4 py-4">
+        <SupabaseTest />
+      </div>
+
       {/* Hero Section with Gradient */}
       <div className="gradient-mint-to-cyan text-white">
         <div className="container mx-auto px-4 py-16">
