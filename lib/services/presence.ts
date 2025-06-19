@@ -47,6 +47,12 @@ export class PresenceService {
       return;
     }
 
+    // Check if we're offline
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log('Offline - skipping presence join');
+      return;
+    }
+
     this.isJoining = true;
 
     try {
@@ -59,6 +65,9 @@ export class PresenceService {
         config: {
           presence: {
             key: this.userId,
+          },
+          broadcast: {
+            self: false,
           },
         },
       });
@@ -100,6 +109,16 @@ export class PresenceService {
           }
         });
       });
+    } catch (error) {
+      // Don't throw for connection errors, just log them
+      if (
+        error instanceof Error &&
+        (error.message.includes('WebSocket') || error.message.includes('interrupted'))
+      ) {
+        console.log('WebSocket connection issue, will retry when online');
+      } else {
+        console.warn('Presence join error:', error);
+      }
     } finally {
       this.isJoining = false;
     }

@@ -17,19 +17,28 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
   // Delay initialization until after page load to avoid interruption errors
   useEffect(() => {
-    // Only start after the page is fully loaded
-    if (typeof window !== 'undefined' && document.readyState === 'complete') {
-      const timer = setTimeout(() => setIsReady(true), 1000);
-      return () => clearTimeout(timer);
+    let timer: NodeJS.Timeout;
+
+    // Only start after the page is fully loaded and we're online
+    if (typeof window !== 'undefined' && document.readyState === 'complete' && navigator.onLine) {
+      timer = setTimeout(() => setIsReady(true), 2000);
     } else {
       const handleLoad = () => {
-        const timer = setTimeout(() => setIsReady(true), 1000);
-        return () => clearTimeout(timer);
+        if (navigator.onLine) {
+          timer = setTimeout(() => setIsReady(true), 2000);
+        }
       };
 
       window.addEventListener('load', handleLoad);
-      return () => window.removeEventListener('load', handleLoad);
+      return () => {
+        window.removeEventListener('load', handleLoad);
+        if (timer) clearTimeout(timer);
+      };
     }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const presence = usePresence({
@@ -54,13 +63,29 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
         presence.leave().catch(() => {
           // Silently handle leave errors
         });
-      } else {
-        // User returned to the tab - wait a bit before reconnecting
+      } else if (navigator.onLine) {
+        // User returned to the tab and is online - wait a bit before reconnecting
         reconnectTimeout = setTimeout(() => {
           presence.join().catch(() => {
             // Silently handle join errors
           });
-        }, 500);
+        }, 1000);
+      }
+    };
+
+    const handleOnlineStatus = () => {
+      if (navigator.onLine && !document.hidden) {
+        // Back online, try to reconnect
+        reconnectTimeout = setTimeout(() => {
+          presence.join().catch(() => {
+            // Silently handle join errors
+          });
+        }, 1000);
+      } else if (!navigator.onLine) {
+        // Went offline, leave presence
+        presence.leave().catch(() => {
+          // Silently handle leave errors
+        });
       }
     };
 
@@ -74,6 +99,8 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     // Only add listeners if document is defined (client-side)
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('online', handleOnlineStatus);
+      window.addEventListener('offline', handleOnlineStatus);
       window.addEventListener('beforeunload', handleBeforeUnload);
     }
 
@@ -83,6 +110,8 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       }
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('online', handleOnlineStatus);
+        window.removeEventListener('offline', handleOnlineStatus);
         window.removeEventListener('beforeunload', handleBeforeUnload);
       }
     };

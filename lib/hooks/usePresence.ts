@@ -55,9 +55,15 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     };
   }, [user, profile, supabase]);
 
-  // Join presence channel
+  // Join presence channel with retry logic
   const join = useCallback(async () => {
     if (!serviceRef.current || !user || !profile || !mountedRef.current || hasJoinedRef.current) {
+      return;
+    }
+
+    // Check if we're online before attempting to connect
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log('Offline - skipping presence join');
       return;
     }
 
@@ -101,7 +107,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         setError(error);
         setIsConnected(false);
         // Don't log errors for expected failures (like during navigation)
-        if (!error.message.includes('interrupted')) {
+        if (!error.message.includes('interrupted') && !error.message.includes('WebSocket')) {
           console.warn('Presence join error:', error.message);
         }
       }

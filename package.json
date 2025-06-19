@@ -13,7 +13,8 @@
     "type-check": "tsc --noEmit",
     "db:verify": "tsx scripts/verify-database.ts",
     "db:types": "supabase gen types typescript --project-ref $SUPABASE_PROJECT_REF > lib/types/database.generated.ts",
-    "presence:verify": "tsx scripts/verify-presence.ts"
+    "presence:verify": "tsx scripts/verify-presence.ts",
+    "preferences:check": "tsx scripts/check-preferences.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

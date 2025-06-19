@@ -6,6 +6,37 @@ import type { UserPreferences } from '@/lib/types/preferences';
 import { defaultPreferences, mergeWithDefaults } from '@/lib/types/preferences';
 import { useCallback, useEffect, useState } from 'react';
 
+type PreferencesJson = Record<string, unknown>;
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+
+  try {
+    // Try to parse JSON strings
+    if (value.startsWith('"') && value.endsWith('"')) {
+      return JSON.parse(value);
+    } else if (value === 'true' || value === 'false') {
+      return value === 'true';
+    } else if (!isNaN(Number(value)) && value !== '') {
+      return Number(value);
+    }
+  } catch {
+    // If parsing fails, return original value
+  }
+
+  return value;
+}
+
+function fixDoubleSerialized(prefs: PreferencesJson): PreferencesJson {
+  const fixed: PreferencesJson = {};
+
+  for (const [key, value] of Object.entries(prefs)) {
+    fixed[key] = parseJsonValue(value);
+  }
+
+  return fixed;
+}
+
 export function usePreferences(userId?: string) {
   const supabase = useSupabase();
   const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
@@ -34,8 +65,12 @@ export function usePreferences(userId?: string) {
         if (fetchError) throw fetchError;
 
         if (data?.preferences) {
+          // Fix any double-serialized values
+          const prefs = data.preferences as PreferencesJson;
+          const fixed = fixDoubleSerialized(prefs);
+
           // Merge with defaults to ensure all keys exist
-          const merged = mergeWithDefaults(data.preferences as Partial<UserPreferences>);
+          const merged = mergeWithDefaults(fixed as Partial<UserPreferences>);
           setPreferences(merged);
         }
       } catch (err) {
@@ -65,14 +100,27 @@ export function usePreferences(userId?: string) {
         // Update local state immediately (optimistic update)
         setPreferences((prev) => ({ ...prev, [key]: value }));
 
-        // Update in database
-        const { error: updateError } = await supabase.rpc('update_user_preference', {
+        // Try RPC first, fallback to direct update if RPC doesn't exist
+        const { error: rpcError } = await supabase.rpc('update_user_preference', {
           user_id: userId,
           preference_key: key,
-          preference_value: JSON.stringify(value),
+          preference_value: value, // Pass the raw value, not JSON.stringify
         });
 
-        if (updateError) throw updateError;
+        if (rpcError && rpcError.message.includes('function')) {
+          // RPC function doesn't exist, update directly
+          console.log('Using direct update method for preferences');
+          const updatedPreferences = { ...preferences, [key]: value };
+
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ preferences: updatedPreferences })
+            .eq('id', userId);
+
+          if (updateError) throw updateError;
+        } else if (rpcError) {
+          throw rpcError;
+        }
       } catch (err) {
         console.error('Failed to update preference:', err);
         setError(err instanceof Error ? err : new Error('Failed to update preference'));
