@@ -1,5 +1,6 @@
 'use client';
 
+import { OnlineStatusBadge } from '@/components/presence/OnlineStatus';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
 import { LanguageSelector } from '@/components/profile/LanguageSelector';
 import { StatusSelector } from '@/components/profile/StatusSelector';
@@ -19,7 +20,7 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   const supabase = useSupabase();
-  const { preferences, updatePreference } = usePreferences(user?.id);
+  const { preferences, updatePreference, saving: preferencesSaving } = usePreferences(user?.id);
 
   const [saving, setSaving] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
@@ -140,6 +141,16 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
+                    Current Status
+                  </label>
+                  <OnlineStatusBadge
+                    userId={user.id}
+                    status={profile.status}
+                    lastSeen={profile.last_seen}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
                     Member Since
                   </label>
                   <p className="text-midnight-900 dark:text-slate-100">
@@ -170,7 +181,11 @@ export default function ProfilePage() {
 
             {/* UI Preferences */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
-              <UIPreferences preferences={preferences} onPreferenceChange={updatePreference} />
+              <UIPreferences
+                preferences={preferences}
+                onPreferenceChange={updatePreference}
+                loading={preferencesSaving}
+              />
             </div>
           </div>
         </div>

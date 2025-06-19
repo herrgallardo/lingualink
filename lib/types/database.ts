@@ -1,7 +1,5 @@
 /**
  * Database type definitions
- * These will be auto-generated from Supabase in Step 4
- * For now, we'll define the structure manually
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -19,6 +17,7 @@ export interface Database {
           status: 'available' | 'busy' | 'do-not-disturb' | 'invisible';
           is_typing: boolean;
           last_seen: string; // timestamp with time zone
+          preferences: Json;
           created_at: string;
           updated_at: string;
         };
@@ -31,6 +30,7 @@ export interface Database {
           status?: 'available' | 'busy' | 'do-not-disturb' | 'invisible';
           is_typing?: boolean;
           last_seen?: string;
+          preferences?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -43,6 +43,7 @@ export interface Database {
           status?: 'available' | 'busy' | 'do-not-disturb' | 'invisible';
           is_typing?: boolean;
           last_seen?: string;
+          preferences?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -247,6 +248,18 @@ export interface Database {
       refresh_user_stats: {
         Args: Record<PropertyKey, never>;
         Returns: void;
+      };
+      update_user_preference: {
+        Args: {
+          user_id: string;
+          preference_key: string;
+          preference_value: Json;
+        };
+        Returns: Json;
+      };
+      get_user_preferences: {
+        Args: { user_id: string };
+        Returns: Json;
       };
     };
     Enums: {

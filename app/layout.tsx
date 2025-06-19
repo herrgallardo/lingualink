@@ -1,4 +1,6 @@
 import { AuthProvider } from '@/lib/context/auth-context';
+import { PreferencesProvider } from '@/lib/context/preferences-context';
+import { PresenceProvider } from '@/lib/context/presence-context';
 import { ProfileProvider } from '@/lib/context/profile-context';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
@@ -24,7 +26,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
-          <ProfileProvider>{children}</ProfileProvider>
+          <ProfileProvider>
+            <PreferencesProvider>
+              <PresenceProvider>{children}</PresenceProvider>
+            </PreferencesProvider>
+          </ProfileProvider>
         </AuthProvider>
       </body>
     </html>
