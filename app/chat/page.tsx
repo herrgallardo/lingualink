@@ -96,13 +96,15 @@ export default function ChatPage() {
                 )}
               </div>
               <div className="absolute bottom-0 right-0">
-                <OnlineStatusIndicator
-                  userId={profile?.id}
-                  status={profile?.status || 'available'}
-                  lastSeen={profile?.last_seen}
-                  size="large"
-                  className="ring-2 ring-white dark:ring-slate-800"
-                />
+                {profile && (
+                  <OnlineStatusIndicator
+                    userId={profile.id}
+                    status={profile.status || 'available'}
+                    {...(profile.last_seen !== undefined && { lastSeen: profile.last_seen })}
+                    size="large"
+                    className="ring-2 ring-white dark:ring-slate-800"
+                  />
+                )}
               </div>
             </div>
             <div className="flex-1">
@@ -117,7 +119,7 @@ export default function ChatPage() {
           </div>
 
           <p className="text-teal-700 dark:text-teal-400 mb-4">
-            This is the chat page. We'll build the full chat interface in the upcoming steps.
+            This is the chat page. We&#39;ll build the full chat interface in the upcoming steps.
           </p>
 
           {/* Preferences Demo */}
@@ -161,11 +163,13 @@ export default function ChatPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500 mb-1">Status</p>
-              <OnlineStatusBadge
-                userId={profile?.id}
-                status={profile?.status}
-                lastSeen={profile?.last_seen}
-              />
+              {profile && (
+                <OnlineStatusBadge
+                  userId={profile.id}
+                  {...(profile.status !== undefined && { status: profile.status })}
+                  {...(profile.last_seen !== undefined && { lastSeen: profile.last_seen })}
+                />
+              )}
             </div>
             <div>
               <p className="text-xs text-slate-500 mb-1">Last Seen</p>

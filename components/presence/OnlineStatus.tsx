@@ -131,17 +131,28 @@ export function OnlineStatusBadge({
     }
   };
 
+  // Build props object conditionally to handle exactOptionalPropertyTypes
+  const indicatorProps: OnlineStatusIndicatorProps = {
+    status,
+    size: 'small',
+    showOffline: true,
+  };
+
+  // Only add userId if it's defined
+  if (userId !== undefined) {
+    indicatorProps.userId = userId;
+  }
+
+  // Only add lastSeen if it's not undefined
+  if (lastSeen !== undefined) {
+    indicatorProps.lastSeen = lastSeen;
+  }
+
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyles()} ${className}`}
     >
-      <OnlineStatusIndicator
-        userId={userId}
-        status={status}
-        lastSeen={lastSeen}
-        size="small"
-        showOffline={true}
-      />
+      <OnlineStatusIndicator {...indicatorProps} />
       {showLabel && <span>{getStatusLabel()}</span>}
     </span>
   );

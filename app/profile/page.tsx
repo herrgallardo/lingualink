@@ -145,8 +145,8 @@ export default function ProfilePage() {
                   </label>
                   <OnlineStatusBadge
                     userId={user.id}
-                    status={profile.status}
-                    lastSeen={profile.last_seen}
+                    {...(profile.status !== undefined && { status: profile.status })}
+                    {...(profile.last_seen !== undefined && { lastSeen: profile.last_seen })}
                   />
                 </div>
                 <div>

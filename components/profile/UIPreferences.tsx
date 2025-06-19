@@ -10,6 +10,7 @@ import {
   Squares2X2Icon,
   TableCellsIcon,
 } from '@heroicons/react/24/outline';
+import type { ReactElement } from 'react';
 import { Switch } from '../ui/Switch';
 
 interface UIPreferencesProps {
@@ -18,25 +19,45 @@ interface UIPreferencesProps {
   loading?: boolean;
 }
 
+// Define types for preference items
+type SwitchItem = {
+  key: keyof UserPreferences;
+  label: string;
+  description: string;
+  icon: ReactElement;
+  type: 'switch';
+};
+
+type SelectItem = {
+  key: keyof UserPreferences;
+  label: string;
+  description: string;
+  icon: ReactElement;
+  type: 'select';
+  options: Array<{ value: string; label: string }>;
+};
+
+type PreferenceItem = SwitchItem | SelectItem;
+
 export function UIPreferences({
   preferences,
   onPreferenceChange,
   loading = false,
 }: UIPreferencesProps) {
-  const appearanceItems = [
+  const appearanceItems: PreferenceItem[] = [
     {
-      key: 'compactView' as const,
+      key: 'compactView',
       label: 'Compact View',
       description: 'Show more messages on screen with reduced spacing',
       icon: <TableCellsIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'theme' as const,
+      key: 'theme',
       label: 'Theme',
       description: 'Choose your preferred color theme',
       icon: <span className="text-base">🎨</span>,
-      type: 'select' as const,
+      type: 'select',
       options: [
         { value: 'light', label: 'Light' },
         { value: 'dark', label: 'Dark' },
@@ -44,11 +65,11 @@ export function UIPreferences({
       ],
     },
     {
-      key: 'fontSize' as const,
+      key: 'fontSize',
       label: 'Font Size',
       description: 'Adjust text size for better readability',
       icon: <span className="text-base">🔤</span>,
-      type: 'select' as const,
+      type: 'select',
       options: [
         { value: 'small', label: 'Small' },
         { value: 'medium', label: 'Medium' },
@@ -56,70 +77,70 @@ export function UIPreferences({
       ],
     },
     {
-      key: 'showTimestamps' as const,
+      key: 'showTimestamps',
       label: 'Show Timestamps',
       description: 'Display time for each message',
       icon: <ClockIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'messageGrouping' as const,
+      key: 'messageGrouping',
       label: 'Group Messages',
       description: 'Group consecutive messages from same sender',
       icon: <Squares2X2Icon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
   ];
 
-  const notificationItems = [
+  const notificationItems: PreferenceItem[] = [
     {
-      key: 'notificationSounds' as const,
+      key: 'notificationSounds',
       label: 'Notification Sounds',
       description: 'Play sounds for new messages',
       icon: <SpeakerWaveIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'messagePreview' as const,
+      key: 'messagePreview',
       label: 'Message Preview',
       description: 'Show message content in notifications',
       icon: <BellIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
   ];
 
-  const chatItems = [
+  const chatItems: PreferenceItem[] = [
     {
-      key: 'showTypingIndicator' as const,
+      key: 'showTypingIndicator',
       label: 'Typing Indicators',
       description: 'Show when others are typing',
       icon: <ChatBubbleLeftRightIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'autoTranslate' as const,
+      key: 'autoTranslate',
       label: 'Auto-Translate',
       description: 'Automatically translate incoming messages',
       icon: <LanguageIcon className="w-5 h-5" />,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'enterToSend' as const,
+      key: 'enterToSend',
       label: 'Enter to Send',
       description: 'Press Enter to send messages (Shift+Enter for new line)',
       icon: <span className="text-base">⏎</span>,
-      type: 'switch' as const,
+      type: 'switch',
     },
     {
-      key: 'showReadReceipts' as const,
+      key: 'showReadReceipts',
       label: 'Read Receipts',
       description: 'Show when messages have been read',
       icon: <span className="text-base">✓✓</span>,
-      type: 'switch' as const,
+      type: 'switch',
     },
   ];
 
-  const renderPreferenceItem = (item: (typeof appearanceItems)[0]) => {
+  const renderPreferenceItem = (item: PreferenceItem) => {
     if (item.type === 'switch') {
       return (
         <Switch
@@ -132,11 +153,19 @@ export function UIPreferences({
     }
 
     if (item.type === 'select' && 'options' in item) {
+      const currentValue = preferences[item.key] as string;
       return (
         <select
           id={item.key}
-          value={preferences[item.key] as string}
-          onChange={(e) => onPreferenceChange(item.key, e.target.value as any)}
+          value={currentValue}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (item.key === 'theme') {
+              onPreferenceChange(item.key, value as UserPreferences['theme']);
+            } else if (item.key === 'fontSize') {
+              onPreferenceChange(item.key, value as UserPreferences['fontSize']);
+            }
+          }}
           disabled={loading}
           className="px-3 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >

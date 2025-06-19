@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Script to verify real-time presence setup
  * Run with: npx tsx scripts/verify-presence.ts
@@ -69,46 +69,44 @@ async function verifyPresence() {
 
     if (users && users.length > 0) {
       const testUser = users[0];
-      console.log(`  ℹ️  Test user: ${testUser.username}`);
-      console.log(`  ℹ️  Last seen: ${testUser.last_seen}`);
+      if (testUser) {
+        console.log(`  ℹ️  Test user: ${testUser.username}`);
+        console.log(`  ℹ️  Last seen: ${testUser.last_seen}`);
 
-      // Update last_seen
-      const { error } = await supabase
-        .from('users')
-        .update({ last_seen: new Date().toISOString() })
-        .eq('id', testUser.id);
+        // Update last_seen
+        const { error } = await supabase
+          .from('users')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', testUser.id);
 
-      if (error) {
-        console.log('  ❌ Failed to update last_seen:', error.message);
-      } else {
-        console.log('  ✅ Successfully updated last_seen');
+        if (error) {
+          console.log('  ❌ Failed to update last_seen:', error.message);
+        } else {
+          console.log('  ✅ Successfully updated last_seen');
+        }
+
+        // 3. Check typing status functionality
+        console.log('\n⌨️  Checking typing status...');
+
+        // Update typing status to true
+        const { error: typingError } = await supabase
+          .from('users')
+          .update({ is_typing: true })
+          .eq('id', testUser.id);
+
+        if (typingError) {
+          console.log('  ❌ Failed to update typing status:', typingError.message);
+        } else {
+          console.log('  ✅ Successfully set typing status to true');
+
+          // Reset typing status
+          await supabase.from('users').update({ is_typing: false }).eq('id', testUser.id);
+
+          console.log('  ✅ Successfully reset typing status to false');
+        }
       }
     } else {
       console.log('  ⚠️  No users found for testing');
-    }
-
-    // 3. Check typing status functionality
-    console.log('\n⌨️  Checking typing status...');
-
-    if (users && users.length > 0) {
-      const testUser = users[0] as any;
-
-      // Update typing status to true
-      const { error: typingError } = await supabase
-        .from('users')
-        .update({ is_typing: true })
-        .eq('id', testUser.id);
-
-      if (typingError) {
-        console.log('  ❌ Failed to update typing status:', typingError.message);
-      } else {
-        console.log('  ✅ Successfully set typing status to true');
-
-        // Reset typing status
-        await supabase.from('users').update({ is_typing: false }).eq('id', testUser.id);
-
-        console.log('  ✅ Successfully reset typing status to false');
-      }
     }
 
     // Summary

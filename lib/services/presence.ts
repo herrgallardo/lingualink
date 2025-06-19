@@ -23,6 +23,8 @@ export class PresenceService {
   private channel: RealtimeChannel | null = null;
   private userId: string;
   private updateInterval: NodeJS.Timeout | null = null;
+  private isJoining = false;
+  private isLeaving = false;
 
   constructor(supabase: SupabaseClient<Database>, userId: string) {
     this.supabase = supabase;
@@ -33,59 +35,103 @@ export class PresenceService {
    * Join a presence channel and start tracking
    */
   async join(channelName: string, userData: Omit<PresenceUser, 'online_at'>): Promise<void> {
-    // Leave any existing channel
-    if (this.channel) {
-      await this.leave();
+    // Prevent multiple simultaneous join attempts
+    if (this.isJoining || this.isLeaving) {
+      console.log('Already joining/leaving, skipping...');
+      return;
     }
 
-    this.channel = this.supabase.channel(channelName);
-    const currentChannel = this.channel;
+    // Check if page is unloading
+    if (typeof window !== 'undefined' && window.performance.navigation.type === 1) {
+      console.log('Page is reloading, skipping presence join...');
+      return;
+    }
 
-    // Subscribe to presence sync events
-    currentChannel.on('presence', { event: 'sync' }, () => {
-      console.log('Presence state synced');
-    });
+    this.isJoining = true;
 
-    // Subscribe and track user presence
-    await new Promise<void>((resolve, reject) => {
-      currentChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          try {
-            const presenceData: PresenceUser = {
-              ...userData,
-              online_at: new Date().toISOString(),
-            };
+    try {
+      // Leave any existing channel
+      if (this.channel) {
+        await this.leave();
+      }
 
-            await currentChannel.track(presenceData);
-
-            // Start heartbeat
-            this.startHeartbeat();
-
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        } else if (status === 'CHANNEL_ERROR') {
-          reject(new Error('Failed to subscribe to presence channel'));
-        }
+      this.channel = this.supabase.channel(channelName, {
+        config: {
+          presence: {
+            key: this.userId,
+          },
+        },
       });
-    });
+
+      const currentChannel = this.channel;
+
+      // Subscribe to presence sync events
+      currentChannel.on('presence', { event: 'sync' }, () => {
+        // Presence state synced
+      });
+
+      // Subscribe and track user presence
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Subscription timeout'));
+        }, 10000);
+
+        currentChannel.subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(timeout);
+            try {
+              const presenceData: PresenceUser = {
+                ...userData,
+                online_at: new Date().toISOString(),
+              };
+
+              await currentChannel.track(presenceData);
+
+              // Start heartbeat
+              this.startHeartbeat();
+
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            clearTimeout(timeout);
+            reject(new Error(`Channel subscription failed: ${status}`));
+          }
+        });
+      });
+    } finally {
+      this.isJoining = false;
+    }
   }
 
   /**
    * Leave the presence channel
    */
   async leave(): Promise<void> {
+    if (this.isLeaving) return;
+
+    this.isLeaving = true;
     this.stopHeartbeat();
 
     if (this.channel) {
-      await this.channel.untrack();
-      await this.supabase.removeChannel(this.channel);
+      try {
+        await this.channel.untrack();
+        await this.supabase.removeChannel(this.channel);
+      } catch {
+        // Silently handle errors during cleanup
+      }
       this.channel = null;
     }
 
     // Update last_seen in database
-    await this.updateLastSeen();
+    try {
+      await this.updateLastSeen();
+    } catch {
+      // Silently handle errors
+    }
+
+    this.isLeaving = false;
   }
 
   /**
@@ -94,32 +140,35 @@ export class PresenceService {
   getPresenceState(): PresenceState {
     if (!this.channel) return {};
 
-    const rawState = this.channel.presenceState<PresenceUser>();
-    const formattedState: PresenceState = {};
+    try {
+      const rawState = this.channel.presenceState<PresenceUser>();
+      const formattedState: PresenceState = {};
 
-    // Transform Supabase presence state to our format
-    // Supabase returns: { [key: string]: Array<T & { presence_ref: string }> }
-    Object.entries(rawState).forEach(([key, presences]) => {
-      if (Array.isArray(presences)) {
-        // Filter and map to remove presence_ref
-        formattedState[key] = presences
-          .filter((p): p is PresenceUser & { presence_ref: string } => {
-            return (
-              p !== null &&
-              typeof p === 'object' &&
-              'id' in p &&
-              'username' in p &&
-              'avatar_url' in p &&
-              'status' in p &&
-              'last_seen' in p &&
-              'online_at' in p
-            );
-          })
-          .map(({ presence_ref, ...userData }) => userData as PresenceUser);
-      }
-    });
+      // Transform Supabase presence state to our format
+      Object.entries(rawState).forEach(([key, presences]) => {
+        if (Array.isArray(presences)) {
+          // Filter and map to remove presence_ref
+          formattedState[key] = presences
+            .filter((p): p is PresenceUser & { presence_ref: string } => {
+              return (
+                p !== null &&
+                typeof p === 'object' &&
+                'id' in p &&
+                'username' in p &&
+                'avatar_url' in p &&
+                'status' in p &&
+                'last_seen' in p &&
+                'online_at' in p
+              );
+            })
+            .map(({ presence_ref: _presence_ref, ...userData }) => userData as PresenceUser);
+        }
+      });
 
-    return formattedState;
+      return formattedState;
+    } catch {
+      return {};
+    }
   }
 
   /**
@@ -131,8 +180,8 @@ export class PresenceService {
         .from('users')
         .update({ last_seen: new Date().toISOString() })
         .eq('id', this.userId);
-    } catch (error) {
-      console.error('Failed to update last_seen:', error);
+    } catch {
+      // Silently handle errors
     }
   }
 

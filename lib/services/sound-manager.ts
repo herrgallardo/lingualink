@@ -34,6 +34,11 @@ const SOUNDS: Record<SoundType, SoundConfig> = {
   },
 };
 
+// Type augmentation for webkit prefix
+interface WindowWithWebkit extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 class SoundManager {
   private audioContext: AudioContext | null = null;
   private audioBuffers: Map<SoundType, AudioBuffer> = new Map();
@@ -45,8 +50,14 @@ class SoundManager {
     if (typeof window !== 'undefined') {
       const initAudio = () => {
         if (!this.audioContext) {
-          this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-          this.preloadSounds();
+          const windowWithWebkit = window as WindowWithWebkit;
+          const AudioContextConstructor =
+            window.AudioContext || windowWithWebkit.webkitAudioContext;
+
+          if (AudioContextConstructor) {
+            this.audioContext = new AudioContextConstructor();
+            this.preloadSounds();
+          }
         }
         // Remove listeners after initialization
         document.removeEventListener('click', initAudio);
@@ -165,7 +176,14 @@ export function getSoundManager(): SoundManager {
   if (!soundManager && typeof window !== 'undefined') {
     soundManager = new SoundManager();
   }
-  return soundManager!;
+
+  if (!soundManager) {
+    throw new Error(
+      'SoundManager not initialized. This should only be called in a browser environment.',
+    );
+  }
+
+  return soundManager;
 }
 
 // React hook for using sound manager

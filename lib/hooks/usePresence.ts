@@ -31,29 +31,40 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
   const [error, setError] = useState<Error | null>(null);
   const serviceRef = useRef<PresenceService | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
+  const hasJoinedRef = useRef(false);
 
   // Initialize presence service
   useEffect(() => {
+    mountedRef.current = true;
+
     if (!user || !profile) return;
 
     const service = new PresenceService(supabase, user.id);
     serviceRef.current = service;
 
     return () => {
+      mountedRef.current = false;
+      hasJoinedRef.current = false;
       // Cleanup on unmount
-      service.leave().catch(console.error);
+      if (service) {
+        service.leave().catch(() => {
+          // Silently handle cleanup errors
+        });
+      }
     };
   }, [user, profile, supabase]);
 
   // Join presence channel
   const join = useCallback(async () => {
-    if (!serviceRef.current || !user || !profile) {
-      setError(new Error('Presence service not initialized'));
+    if (!serviceRef.current || !user || !profile || !mountedRef.current || hasJoinedRef.current) {
       return;
     }
 
     try {
+      hasJoinedRef.current = true;
       setError(null);
+
       await serviceRef.current.join(channelName, {
         id: user.id,
         username: profile.username,
@@ -61,28 +72,47 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         status: profile.status,
         last_seen: profile.last_seen,
       });
+
+      if (!mountedRef.current) return;
+
       setIsConnected(true);
 
       // Set up interval to update presence state
       const updateState = () => {
-        if (serviceRef.current) {
+        if (serviceRef.current && mountedRef.current) {
           setPresenceState(serviceRef.current.getPresenceState());
         }
       };
 
       updateState();
 
+      // Clear any existing interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
       // Store interval reference
       intervalRef.current = setInterval(updateState, 1000);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to join presence'));
-      setIsConnected(false);
+      hasJoinedRef.current = false;
+      // Only set error if we're still mounted
+      if (mountedRef.current) {
+        const error = err instanceof Error ? err : new Error('Failed to join presence');
+        setError(error);
+        setIsConnected(false);
+        // Don't log errors for expected failures (like during navigation)
+        if (!error.message.includes('interrupted')) {
+          console.warn('Presence join error:', error.message);
+        }
+      }
     }
   }, [channelName, user, profile]);
 
   // Leave presence channel
   const leave = useCallback(async () => {
     if (!serviceRef.current) return;
+
+    hasJoinedRef.current = false;
 
     try {
       // Clear interval
@@ -92,33 +122,31 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
       }
 
       await serviceRef.current.leave();
-      setIsConnected(false);
-      setPresenceState({});
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to leave presence'));
+
+      if (mountedRef.current) {
+        setIsConnected(false);
+        setPresenceState({});
+      }
+    } catch {
+      // Silently handle leave errors
     }
   }, []);
 
   // Auto-join on mount if enabled
   useEffect(() => {
-    let mounted = true;
+    if (!autoJoin || !user || !profile) return;
 
-    const handleAutoJoin = async () => {
-      if (autoJoin && user && profile && mounted) {
-        await join();
+    // Add a small delay to ensure everything is ready
+    const timer = setTimeout(() => {
+      if (mountedRef.current && !hasJoinedRef.current) {
+        join();
       }
-    };
-
-    handleAutoJoin();
+    }, 1000);
 
     return () => {
-      mounted = false;
-      if (autoJoin) {
-        leave();
-      }
+      clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoJoin, user, profile]); // Intentionally omit join/leave to avoid infinite loops
+  }, [autoJoin, user, profile, join]);
 
   // Clean up interval on unmount
   useEffect(() => {
@@ -130,12 +158,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
   }, []);
 
   // Helper functions
-  const isUserOnline = useCallback(
-    (userId: string): boolean => {
-      return serviceRef.current?.isUserOnline(userId) ?? false;
-    },
-    [], // No dependencies needed, serviceRef is stable
-  );
+  const isUserOnline = useCallback((userId: string): boolean => {
+    return serviceRef.current?.isUserOnline(userId) ?? false;
+  }, []);
 
   const onlineUsers = Object.values(presenceState).flat();
   const onlineCount = onlineUsers.length;
@@ -160,11 +185,16 @@ export function useTypingIndicator(chatId: string) {
   const { user } = useUser();
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     if (!user || !chatId) return;
 
     const channel = supabase.channel(`typing:${chatId}`);
+    channelRef.current = channel;
 
     // Track typing status for current user
     const userTypingData = {
@@ -174,15 +204,14 @@ export function useTypingIndicator(chatId: string) {
 
     channel
       .on('presence', { event: 'sync' }, () => {
+        if (!mountedRef.current) return;
+
         const state = channel.presenceState();
         const typing = new Set<string>();
 
-        // Supabase presence state structure:
-        // { [presence_ref]: Array<presence_data> }
         Object.entries(state).forEach(([_ref, presences]) => {
           if (Array.isArray(presences)) {
             presences.forEach((presence) => {
-              // Check if this presence object has our expected structure
               if (
                 presence &&
                 typeof presence === 'object' &&
@@ -200,21 +229,26 @@ export function useTypingIndicator(chatId: string) {
         setTypingUsers(typing);
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // Track initial state
+        if (status === 'SUBSCRIBED' && mountedRef.current) {
           await channel.track(userTypingData);
         }
       });
 
     return () => {
-      channel.untrack();
+      mountedRef.current = false;
+      // Clean up timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      // Untrack and remove channel
+      channel.untrack().catch(() => {});
       supabase.removeChannel(channel);
     };
   }, [chatId, user, supabase]);
 
   const setTyping = useCallback(
     async (isTyping: boolean) => {
-      if (!user || !chatId) return;
+      if (!user || !chatId || !channelRef.current || !mountedRef.current) return;
 
       // Clear existing timeout
       if (typingTimeoutRef.current) {
@@ -227,20 +261,19 @@ export function useTypingIndicator(chatId: string) {
         await supabase.from('users').update({ is_typing: isTyping }).eq('id', user.id);
 
         // Also update presence channel
-        const channel = supabase.channel(`typing:${chatId}`);
-        await channel.track({
+        await channelRef.current.track({
           user_id: user.id,
           is_typing: isTyping,
         });
 
         // Auto-stop typing after 2 seconds
-        if (isTyping) {
+        if (isTyping && mountedRef.current) {
           typingTimeoutRef.current = setTimeout(() => {
             setTyping(false);
           }, 2000);
         }
-      } catch (error) {
-        console.error('Failed to update typing status:', error);
+      } catch {
+        // Silently handle errors
       }
     },
     [user, chatId, supabase],

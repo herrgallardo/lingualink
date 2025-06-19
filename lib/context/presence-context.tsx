@@ -1,7 +1,7 @@
 'use client';
 
 import { isUserOnlineByLastSeen } from '@/lib/services/presence';
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { usePresence } from '../hooks/usePresence';
 
 interface PresenceContextType {
@@ -13,36 +13,80 @@ interface PresenceContextType {
 const PresenceContext = createContext<PresenceContextType | undefined>(undefined);
 
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
+  const [isReady, setIsReady] = useState(false);
+
+  // Delay initialization until after page load to avoid interruption errors
+  useEffect(() => {
+    // Only start after the page is fully loaded
+    if (typeof window !== 'undefined' && document.readyState === 'complete') {
+      const timer = setTimeout(() => setIsReady(true), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      const handleLoad = () => {
+        const timer = setTimeout(() => setIsReady(true), 1000);
+        return () => clearTimeout(timer);
+      };
+
+      window.addEventListener('load', handleLoad);
+      return () => window.removeEventListener('load', handleLoad);
+    }
+  }, []);
+
   const presence = usePresence({
     channelName: 'global-presence',
-    autoJoin: true,
+    autoJoin: isReady, // Only auto-join when ready
   });
 
   // Handle window focus/blur to update presence
   useEffect(() => {
+    if (!isReady) return;
+
+    let reconnectTimeout: NodeJS.Timeout;
+
     const handleVisibilityChange = () => {
+      // Clear any pending reconnect
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+
       if (document.hidden) {
         // User switched to another tab/minimized window
-        presence.leave();
+        presence.leave().catch(() => {
+          // Silently handle leave errors
+        });
       } else {
-        // User returned to the tab
-        presence.join();
+        // User returned to the tab - wait a bit before reconnecting
+        reconnectTimeout = setTimeout(() => {
+          presence.join().catch(() => {
+            // Silently handle join errors
+          });
+        }, 500);
       }
     };
 
     const handleBeforeUnload = () => {
       // Clean up presence before page unload
-      presence.leave();
+      presence.leave().catch(() => {
+        // Silently handle leave errors during unload
+      });
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Only add listeners if document is defined (client-side)
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    }
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
     };
-  }, [presence]);
+  }, [presence, isReady]);
 
   // Enhanced isUserOnline that checks both real-time presence and last_seen
   const isUserOnline = (userId: string): boolean => {
