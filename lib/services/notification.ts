@@ -40,7 +40,6 @@ export class NotificationService {
   private supabase: SupabaseClient<Database>;
   private userId: string | null = null;
   private channel: ReturnType<typeof this.supabase.channel> | null = null;
-  private pushSubscription: globalThis.PushSubscription | null = null;
 
   constructor(supabase: SupabaseClient<Database>) {
     this.supabase = supabase;
@@ -139,8 +138,6 @@ export class NotificationService {
         ),
       });
 
-      this.pushSubscription = subscription;
-
       // Save subscription to database
       await this.savePushSubscription(subscription);
     } catch (error) {
@@ -194,7 +191,8 @@ export class NotificationService {
       return;
     }
 
-    const options: NotificationOptions = {
+    // Cast to any to avoid TypeScript errors with the actions property
+    const options: NotificationOptions & { actions?: { action: string; title: string }[] } = {
       body: notification.body,
       icon: '/icon-192.png',
       badge: '/badge-72.png',
@@ -204,7 +202,11 @@ export class NotificationService {
         type: notification.type,
         ...notification.data,
       },
-      actions: [
+    };
+
+    // Add actions if supported (not all browsers support notification actions)
+    if ('actions' in Notification.prototype) {
+      options.actions = [
         {
           action: 'view',
           title: 'View',
@@ -213,8 +215,8 @@ export class NotificationService {
           action: 'dismiss',
           title: 'Dismiss',
         },
-      ],
-    };
+      ];
+    }
 
     const browserNotification = new Notification(notification.title, options);
 

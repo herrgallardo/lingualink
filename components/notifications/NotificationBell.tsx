@@ -55,6 +55,8 @@ export function NotificationBell({ userId, onClick, className = '' }: Notificati
         window.removeEventListener('lingualink:notification', handleNewNotification);
       };
     }
+    // Explicitly return undefined when window is not defined
+    return undefined;
   }, []);
 
   // Listen for read notifications (custom events from notification center)
@@ -76,6 +78,8 @@ export function NotificationBell({ userId, onClick, className = '' }: Notificati
         window.removeEventListener('lingualink:all-notifications-read', handleAllNotificationsRead);
       };
     }
+    // Explicitly return undefined when window is not defined
+    return undefined;
   }, []);
 
   return (

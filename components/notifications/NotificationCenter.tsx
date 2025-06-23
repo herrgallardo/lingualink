@@ -66,6 +66,8 @@ export function NotificationCenter({ isOpen, onClose, userId }: NotificationCent
         );
       };
     }
+    // Explicitly return undefined when window is not defined
+    return undefined;
   }, []);
 
   // Mark notification as read
