@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function ChatPage() {
   const { signOut } = useAuth();
@@ -28,6 +29,11 @@ export default function ChatPage() {
   const { preferences } = usePreferencesContext();
   const playMessageSound = useMessageSound();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (loading) {
     return (
@@ -129,8 +135,9 @@ export default function ChatPage() {
             </h3>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={playMessageSound}
+                onClick={() => mounted && playMessageSound()}
                 className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 text-cyan-600 border border-cyan-200 dark:border-cyan-800 rounded-md hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-colors text-sm"
+                disabled={!mounted}
               >
                 <BellIcon className="w-4 h-4" />
                 Test Sound

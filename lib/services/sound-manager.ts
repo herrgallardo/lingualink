@@ -5,32 +5,43 @@
 export type SoundType = 'message' | 'notification' | 'mention' | 'error' | 'success';
 
 interface SoundConfig {
-  url: string;
-  volume?: number;
-  duration?: number;
+  frequency: number;
+  duration: number;
+  volume: number;
+  type?: OscillatorType;
 }
 
-// Using data URLs for built-in sounds (small beep sounds)
+// Using oscillator-based sounds instead of base64 data
 const SOUNDS: Record<SoundType, SoundConfig> = {
   message: {
-    url: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQoGAAA=',
+    frequency: 440,
+    duration: 100,
     volume: 0.3,
+    type: 'sine',
   },
   notification: {
-    url: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQoGAAA=',
+    frequency: 587,
+    duration: 150,
     volume: 0.5,
+    type: 'sine',
   },
   mention: {
-    url: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQoGAAA=',
+    frequency: 880,
+    duration: 200,
     volume: 0.7,
+    type: 'square',
   },
   error: {
-    url: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQoGAAA=',
+    frequency: 200,
+    duration: 300,
     volume: 0.5,
+    type: 'sawtooth',
   },
   success: {
-    url: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQoGAAA=',
+    frequency: 659,
+    duration: 150,
     volume: 0.4,
+    type: 'sine',
   },
 };
 
@@ -39,80 +50,79 @@ interface WindowWithWebkit extends Window {
   webkitAudioContext?: typeof AudioContext;
 }
 
-class SoundManager {
+// Public interface for sound manager
+export interface ISoundManager {
+  play(type: SoundType, volume?: number): Promise<void>;
+  setGlobalVolume(volume: number): void;
+  setEnabled(enabled: boolean): void;
+  isEnabled(): boolean;
+  beep(frequency?: number, duration?: number, volume?: number): Promise<void>;
+}
+
+class SoundManager implements ISoundManager {
   private audioContext: AudioContext | null = null;
-  private audioBuffers: Map<SoundType, AudioBuffer> = new Map();
   private enabled: boolean = true;
   private globalVolume: number = 1.0;
+  private initialized: boolean = false;
 
   constructor() {
-    // Initialize on first user interaction to comply with browser policies
-    if (typeof window !== 'undefined') {
-      const initAudio = () => {
-        if (!this.audioContext) {
-          const windowWithWebkit = window as WindowWithWebkit;
-          const AudioContextConstructor =
-            window.AudioContext || windowWithWebkit.webkitAudioContext;
-
-          if (AudioContextConstructor) {
-            this.audioContext = new AudioContextConstructor();
-            this.preloadSounds();
-          }
-        }
-        // Remove listeners after initialization
-        document.removeEventListener('click', initAudio);
-        document.removeEventListener('keydown', initAudio);
-      };
-
-      document.addEventListener('click', initAudio, { once: true });
-      document.addEventListener('keydown', initAudio, { once: true });
-    }
+    // Don't initialize in constructor, wait for user interaction
   }
 
   /**
-   * Preload all sounds into audio buffers
+   * Initialize audio context on first user interaction
    */
-  private async preloadSounds() {
-    if (!this.audioContext) return;
-
-    for (const [type, config] of Object.entries(SOUNDS)) {
-      try {
-        const response = await fetch(config.url);
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        this.audioBuffers.set(type as SoundType, audioBuffer);
-      } catch (error) {
-        console.error(`Failed to load sound: ${type}`, error);
-      }
-    }
-  }
-
-  /**
-   * Play a sound
-   */
-  async play(type: SoundType, volume?: number): Promise<void> {
-    if (!this.enabled || !this.audioContext) return;
-
-    const buffer = this.audioBuffers.get(type);
-    if (!buffer) {
-      console.warn(`Sound not loaded: ${type}`);
-      return;
-    }
+  private async initializeAudioContext(): Promise<void> {
+    if (this.initialized || typeof window === 'undefined') return;
 
     try {
-      const source = this.audioContext.createBufferSource();
+      const windowWithWebkit = window as WindowWithWebkit;
+      const AudioContextConstructor = window.AudioContext || windowWithWebkit.webkitAudioContext;
+
+      if (AudioContextConstructor) {
+        this.audioContext = new AudioContextConstructor();
+        this.initialized = true;
+      }
+    } catch (error) {
+      console.error('Failed to initialize audio context:', error);
+    }
+  }
+
+  /**
+   * Play a sound using oscillator
+   */
+  async play(type: SoundType, volume?: number): Promise<void> {
+    if (!this.enabled || typeof window === 'undefined') return;
+
+    // Initialize on first play
+    if (!this.initialized) {
+      await this.initializeAudioContext();
+    }
+
+    if (!this.audioContext) return;
+
+    try {
+      const config = SOUNDS[type];
+      const oscillator = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
 
-      source.buffer = buffer;
-      source.connect(gainNode);
+      oscillator.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
 
-      // Set volume
-      const soundConfig = SOUNDS[type];
-      const finalVolume = this.globalVolume * (volume ?? soundConfig.volume ?? 1.0);
+      oscillator.frequency.value = config.frequency;
+      oscillator.type = config.type || 'sine';
+
+      const finalVolume = this.globalVolume * (volume ?? config.volume);
       gainNode.gain.value = Math.max(0, Math.min(1, finalVolume));
 
-      source.start(0);
+      // Fade out to prevent clicks
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + config.duration / 1000,
+      );
+
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + config.duration / 1000);
     } catch (error) {
       console.error('Failed to play sound:', error);
     }
@@ -121,14 +131,14 @@ class SoundManager {
   /**
    * Set global volume (0-1)
    */
-  setGlobalVolume(volume: number) {
+  setGlobalVolume(volume: number): void {
     this.globalVolume = Math.max(0, Math.min(1, volume));
   }
 
   /**
    * Enable/disable all sounds
    */
-  setEnabled(enabled: boolean) {
+  setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }
 
@@ -140,10 +150,17 @@ class SoundManager {
   }
 
   /**
-   * Play a simple beep using oscillator (fallback)
+   * Play a custom beep
    */
   async beep(frequency = 440, duration = 100, volume = 0.3): Promise<void> {
-    if (!this.enabled || !this.audioContext) return;
+    if (!this.enabled || typeof window === 'undefined') return;
+
+    // Initialize on first beep
+    if (!this.initialized) {
+      await this.initializeAudioContext();
+    }
+
+    if (!this.audioContext) return;
 
     try {
       const oscillator = this.audioContext.createOscillator();
@@ -169,24 +186,46 @@ class SoundManager {
   }
 }
 
-// Singleton instance
-let soundManager: SoundManager | null = null;
+// Mock implementation for SSR
+class MockSoundManager implements ISoundManager {
+  async play(_type: SoundType, _volume?: number): Promise<void> {
+    // Do nothing on server
+  }
 
-export function getSoundManager(): SoundManager {
-  if (!soundManager && typeof window !== 'undefined') {
-    soundManager = new SoundManager();
+  setGlobalVolume(_volume: number): void {
+    // Do nothing on server
+  }
+
+  setEnabled(_enabled: boolean): void {
+    // Do nothing on server
+  }
+
+  isEnabled(): boolean {
+    return false;
+  }
+
+  async beep(_frequency?: number, _duration?: number, _volume?: number): Promise<void> {
+    // Do nothing on server
+  }
+}
+
+// Singleton instance - only created on client
+let soundManager: ISoundManager | null = null;
+
+export function getSoundManager(): ISoundManager {
+  if (typeof window === 'undefined') {
+    // Return a mock for SSR that does nothing
+    return new MockSoundManager();
   }
 
   if (!soundManager) {
-    throw new Error(
-      'SoundManager not initialized. This should only be called in a browser environment.',
-    );
+    soundManager = new SoundManager();
   }
 
   return soundManager;
 }
 
 // React hook for using sound manager
-export function useSoundManager() {
+export function useSoundManager(): ISoundManager {
   return getSoundManager();
 }
