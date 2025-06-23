@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AuthProvider } from '@/lib/context/auth-context';
 import { PreferencesProvider } from '@/lib/context/preferences-context';
 import { PresenceProvider } from '@/lib/context/presence-context';
@@ -25,13 +26,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>
-          <ProfileProvider>
-            <PreferencesProvider>
-              <PresenceProvider>{children}</PresenceProvider>
-            </PreferencesProvider>
-          </ProfileProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <ProfileProvider>
+              <PreferencesProvider>
+                <PresenceProvider>{children}</PresenceProvider>
+              </PreferencesProvider>
+            </ProfileProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );
