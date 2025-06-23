@@ -101,10 +101,42 @@ export function useTranslation() {
     return {};
   }, []);
 
+  /**
+   * Format a date according to the current locale
+   */
+  const formatDate = useCallback(
+    (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      return dateObj.toLocaleDateString(currentLocale.locale, options);
+    },
+    [],
+  );
+
+  /**
+   * Format a time according to the current locale
+   */
+  const formatTime = useCallback(
+    (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      return dateObj.toLocaleTimeString(currentLocale.locale, options);
+    },
+    [],
+  );
+
+  /**
+   * Format a number according to the current locale
+   */
+  const formatNumber = useCallback((num: number, options?: Intl.NumberFormatOptions): string => {
+    return new Intl.NumberFormat(currentLocale.locale, options).format(num);
+  }, []);
+
   return {
     t,
     section,
     locale: currentLocale.locale,
     language: currentLocale.name,
+    formatDate,
+    formatTime,
+    formatNumber,
   };
 }

@@ -16,11 +16,18 @@ export function TypingIndicator({ users, className = '' }: TypingIndicatorProps)
 
   const getTypingText = () => {
     if (users.length === 1) {
-      return t('presence.isTyping', { name: users[0] });
+      const userName = users[0] || 'Someone';
+      return t('presence.isTyping', { name: userName });
     } else if (users.length === 2) {
-      return t('presence.areTyping', { names: `${users[0]} ${t('common.and')} ${users[1]}` });
+      const firstName = users[0] || 'Someone';
+      const secondName = users[1] || 'Someone';
+      return t('presence.areTyping', { names: `${firstName} ${t('common.and')} ${secondName}` });
     } else {
-      return t('chat.andOthersTyping', { count: users.length - 1 });
+      const firstName = users[0] || 'Someone';
+      const othersCount = users.length - 1;
+      return t('presence.areTyping', {
+        names: `${firstName} ${t('common.and')} ${othersCount} ${t('common.others')}`,
+      });
     }
   };
 

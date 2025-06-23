@@ -285,6 +285,7 @@ export const en: LanguageTranslation = {
       organization: 'Organization',
       organizations: 'Organizations',
       other: 'Other',
+      others: 'others',
       owner: 'Owner',
       pageNotFound: 'Page Not Found',
       parent: 'Parent',
@@ -483,6 +484,11 @@ export const en: LanguageTranslation = {
       yes: 'Yes',
       yesterday: 'Yesterday',
       zipCode: 'Zip Code',
+      selectLanguage: 'Select a language',
+      languages: 'Languages',
+      avatar: '{{name}} avatar',
+      pagination: 'Pagination',
+      goToPage: 'Go to page {{page}}',
     },
     auth: {
       accountCreated: 'Account created successfully!',
@@ -955,6 +961,7 @@ export const en: LanguageTranslation = {
       utilities: 'Utilities',
       whatsNew: "What's New",
       youtube: 'YouTube',
+      goToPage: 'Go to page {{page}}',
     },
     errors: {
       accessDenied: 'Access denied',
@@ -1389,6 +1396,7 @@ export const en: LanguageTranslation = {
       whoCanAddToGroups: 'Who Can Add Me to Groups',
       whoCanMessage: 'Who Can Message Me',
       whoCanSeeProfile: 'Who Can See My Profile',
+      searchLanguages: 'Search Languages',
     },
     presence: {
       activeNow: 'Active now',
@@ -1629,6 +1637,9 @@ export const en: LanguageTranslation = {
       with: 'with',
       without: 'without',
       yesterday: 'Yesterday',
+      searchLanguages: 'Search languages...',
+      noLanguagesFound: 'No languages found',
+      preferredLanguage: 'Preferred Language',
     },
     users: {
       about: 'About',

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Language } from '@/lib/utils/languages';
 import { getLanguageByCode, getSortedLanguages, searchLanguages } from '@/lib/utils/languages';
 import { CheckIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -15,9 +16,10 @@ interface LanguageSelectorProps {
 export function LanguageSelector({
   selectedLanguage,
   onLanguageChange,
-  label = 'Preferred Language',
+  label,
   showFlag = true,
 }: LanguageSelectorProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredLanguages, setFilteredLanguages] = useState<Language[]>([]);
@@ -57,11 +59,13 @@ export function LanguageSelector({
     setSearchQuery('');
   };
 
+  const displayLabel = label || t('settings.preferredLanguage');
+
   return (
     <div className="relative" ref={dropdownRef}>
-      {label && (
+      {displayLabel && (
         <label className="block text-sm font-medium text-midnight-900 dark:text-slate-100 mb-1">
-          {label}
+          {displayLabel}
         </label>
       )}
 
@@ -71,6 +75,7 @@ export function LanguageSelector({
         className="w-full px-4 py-2 text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-colors"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-label={t('settings.language')}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -81,7 +86,7 @@ export function LanguageSelector({
             )}
             <div>
               <span className="block text-midnight-900 dark:text-slate-100">
-                {selectedLang?.name || 'Select a language'}
+                {selectedLang?.name || t('common.selectLanguage')}
               </span>
               {selectedLang && (
                 <span className="block text-xs text-slate-500">{selectedLang.nativeName}</span>
@@ -109,7 +114,7 @@ export function LanguageSelector({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search languages..."
+                placeholder={t('settings.searchLanguages')}
                 className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500"
               />
             </div>
@@ -117,7 +122,9 @@ export function LanguageSelector({
 
           <div className="max-h-80 overflow-y-auto">
             {filteredLanguages.length === 0 ? (
-              <div className="px-4 py-8 text-center text-slate-500 text-sm">No languages found</div>
+              <div className="px-4 py-8 text-center text-slate-500 text-sm">
+                {t('settings.noLanguagesFound')}
+              </div>
             ) : (
               <ul role="listbox" className="py-1">
                 {filteredLanguages.map((language) => (

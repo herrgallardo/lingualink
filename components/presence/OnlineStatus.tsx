@@ -25,6 +25,7 @@ export function OnlineStatusIndicator({
   className = '',
 }: OnlineStatusIndicatorProps) {
   const { isUserOnline } = usePresenceContext();
+  const { t } = useTranslation();
 
   // Determine online status
   const isOnline = userId
@@ -64,8 +65,6 @@ export function OnlineStatusIndicator({
         return 'bg-slate-500';
     }
   };
-
-  const { t } = useTranslation();
 
   return (
     <span
