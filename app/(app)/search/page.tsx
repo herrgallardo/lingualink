@@ -1,94 +1,291 @@
 'use client';
 
-import { MessageSkeleton } from '@/components/ui/Skeleton';
-import { useTranslation } from '@/lib/i18n/useTranslation';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { PageInfo, Pagination } from '@/components/search/Pagination';
+import { SearchFilters } from '@/components/search/SearchFilters';
+import { SearchInput } from '@/components/search/SearchInput';
+import { ChatResults, MessageResults, UserResults } from '@/components/search/SearchResults';
+import { ChatListSkeleton, MessageSkeleton, UserListSkeleton } from '@/components/ui/Skeleton';
+import { useSupabase } from '@/lib/hooks/useSupabase';
+import { SearchService, type SearchFilters as SearchFiltersType } from '@/lib/services/search';
+import type { Database } from '@/lib/types/database';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
-// Define the search result type based on the search_messages function return
-type SearchResult = {
-  message_id: string;
-  chat_id: string;
-  sender_id: string;
-  original_text: string;
-  message_timestamp: string;
-  rank: number;
-};
+type SearchTab = 'messages' | 'chats' | 'users';
+type MessageSearchResult = Database['public']['Functions']['search_messages']['Returns'][0];
+type UserSearchResult = Database['public']['Tables']['users']['Row'];
+type ChatSearchResult = Database['public']['Views']['chat_list']['Row'];
+
+const RESULTS_PER_PAGE = 20;
 
 export default function SearchPage() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<SearchTab>('messages');
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const { t } = useTranslation();
+  const [filters, setFilters] = useState<SearchFiltersType>({});
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!search.trim()) return;
+  // Results state
+  const [messageResults, setMessageResults] = useState<{
+    data: MessageSearchResult[];
+    totalCount: number;
+    totalPages: number;
+  }>({ data: [], totalCount: 0, totalPages: 0 });
+
+  const [chatResults, setChatResults] = useState<{
+    data: ChatSearchResult[];
+    totalCount: number;
+    totalPages: number;
+  }>({ data: [], totalCount: 0, totalPages: 0 });
+
+  const [userResults, setUserResults] = useState<{
+    data: UserSearchResult[];
+    totalCount: number;
+    totalPages: number;
+  }>({ data: [], totalCount: 0, totalPages: 0 });
+
+  const supabase = useSupabase();
+  const router = useRouter();
+  const searchService = new SearchService(supabase);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1); // Reset to first page on new search
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Perform search when debounced value changes
+  useEffect(() => {
+    if (debouncedSearch.trim()) {
+      performSearch();
+    } else {
+      // Clear results if search is empty
+      setMessageResults({ data: [], totalCount: 0, totalPages: 0 });
+      setChatResults({ data: [], totalCount: 0, totalPages: 0 });
+      setUserResults({ data: [], totalCount: 0, totalPages: 0 });
+    }
+  }, [debouncedSearch, activeTab, filters, currentPage]);
+
+  const performSearch = useCallback(async () => {
+    if (!debouncedSearch.trim()) return;
 
     setSearching(true);
-    // TODO: Implement search functionality
-    setTimeout(() => {
+    try {
+      const pagination = { page: currentPage, pageSize: RESULTS_PER_PAGE };
+
+      switch (activeTab) {
+        case 'messages': {
+          const results = await searchService.searchMessages(debouncedSearch, filters, pagination);
+          setMessageResults({
+            data: results.data,
+            totalCount: results.totalCount,
+            totalPages: results.totalPages,
+          });
+          break;
+        }
+
+        case 'chats': {
+          const results = await searchService.searchChats(debouncedSearch, pagination);
+          setChatResults({
+            data: results.data,
+            totalCount: results.totalCount,
+            totalPages: results.totalPages,
+          });
+          break;
+        }
+
+        case 'users': {
+          const results = await searchService.searchUsers(debouncedSearch, pagination);
+          setUserResults({
+            data: results.data,
+            totalCount: results.totalCount,
+            totalPages: results.totalPages,
+          });
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
       setSearching(false);
-      setResults([]);
-    }, 1000);
+    }
+  }, [debouncedSearch, activeTab, filters, currentPage, searchService]);
+
+  const handleUserClick = async (userId: string) => {
+    try {
+      const { data } = await supabase.rpc('create_or_get_direct_chat', {
+        other_user_id: userId,
+      });
+
+      if (data) {
+        router.push(`/chat/${data}`);
+      }
+    } catch (error) {
+      console.error('Failed to create chat:', error);
+    }
   };
 
+  const resetFilters = () => {
+    setFilters({});
+    setCurrentPage(1);
+  };
+
+  const tabs = [
+    { id: 'messages' as const, label: 'Messages', count: messageResults.totalCount },
+    { id: 'chats' as const, label: 'Chats', count: chatResults.totalCount },
+    { id: 'users' as const, label: 'Users', count: userResults.totalCount },
+  ];
+
+  const getCurrentResults = () => {
+    switch (activeTab) {
+      case 'messages':
+        return {
+          data: messageResults.data,
+          totalCount: messageResults.totalCount,
+          totalPages: messageResults.totalPages,
+        };
+      case 'chats':
+        return {
+          data: chatResults.data,
+          totalCount: chatResults.totalCount,
+          totalPages: chatResults.totalPages,
+        };
+      case 'users':
+        return {
+          data: userResults.data,
+          totalCount: userResults.totalCount,
+          totalPages: userResults.totalPages,
+        };
+    }
+  };
+
+  const currentResults = getCurrentResults();
+
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold text-cyan-600 mb-6">{t('search.searchMessages')}</h1>
+    <div className="max-w-6xl mx-auto p-4">
+      <h1 className="text-2xl font-bold text-cyan-600 mb-6">Search</h1>
 
-      {/* Search form */}
-      <form onSubmit={handleSearch} className="mb-8">
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('search.messagePlaceholder')}
-            className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-midnight-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-          />
-          <button
-            type="submit"
-            disabled={searching || !search.trim()}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-1.5 bg-primary text-white rounded-md font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {t('common.search')}
-          </button>
-        </div>
-      </form>
+      {/* Search input */}
+      <div className="mb-6">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search messages, chats, and users..."
+          size="large"
+          autoFocus
+          loading={searching}
+        />
+      </div>
 
-      {/* Results */}
-      {searching ? (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <MessageSkeleton key={i} />
+      {/* Search tabs */}
+      {debouncedSearch && (
+        <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700 mb-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setCurrentPage(1);
+              }}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors relative
+                ${
+                  activeTab === tab.id
+                    ? 'text-cyan-600 dark:text-cyan-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                }
+              `}
+            >
+              <span>{tab.label}</span>
+              {tab.count > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs">
+                  {tab.count}
+                </span>
+              )}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-600 dark:bg-cyan-400" />
+              )}
+            </button>
           ))}
-        </div>
-      ) : results.length > 0 ? (
-        <div className="space-y-4">
-          {/* TODO: Display search results */}
-          {results.map((result) => (
-            <div key={result.message_id} className="p-4 bg-white dark:bg-slate-800 rounded-lg">
-              <p className="text-sm text-midnight-900 dark:text-slate-100">
-                {result.original_text}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {new Date(result.message_timestamp).toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : search && !searching ? (
-        <div className="text-center py-12">
-          <MagnifyingGlassIcon className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500">{t('search.noResultsFor', { query: search })}</p>
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-slate-500">{t('search.searchEverything')}</p>
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Filters sidebar */}
+        {debouncedSearch && activeTab === 'messages' && (
+          <div className="lg:col-span-1">
+            <SearchFilters filters={filters} onFiltersChange={setFilters} onReset={resetFilters} />
+          </div>
+        )}
+
+        {/* Results */}
+        <div
+          className={
+            debouncedSearch && activeTab === 'messages' ? 'lg:col-span-3' : 'lg:col-span-4'
+          }
+        >
+          {searching ? (
+            <div className="space-y-4">
+              {activeTab === 'messages' && [...Array(3)].map((_, i) => <MessageSkeleton key={i} />)}
+              {activeTab === 'chats' && <ChatListSkeleton />}
+              {activeTab === 'users' && <UserListSkeleton />}
+            </div>
+          ) : currentResults.data.length > 0 ? (
+            <>
+              {/* Page info */}
+              <PageInfo
+                currentPage={currentPage}
+                pageSize={RESULTS_PER_PAGE}
+                totalItems={currentResults.totalCount}
+                className="mb-4"
+              />
+
+              {/* Results list */}
+              <div className="mb-6">
+                {activeTab === 'messages' && (
+                  <MessageResults results={messageResults.data} searchQuery={debouncedSearch} />
+                )}
+                {activeTab === 'chats' && <ChatResults results={chatResults.data} />}
+                {activeTab === 'users' && (
+                  <UserResults results={userResults.data} onUserClick={handleUserClick} />
+                )}
+              </div>
+
+              {/* Pagination */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={currentResults.totalPages}
+                onPageChange={setCurrentPage}
+              />
+            </>
+          ) : debouncedSearch && !searching ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">
+                No {activeTab} found for &quot;{debouncedSearch}&quot;
+              </p>
+              {activeTab === 'messages' && Object.keys(filters).length > 0 && (
+                <button
+                  onClick={resetFilters}
+                  className="mt-4 text-cyan-600 hover:text-cyan-700 font-medium"
+                >
+                  Clear filters and try again
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-slate-500">
+                Enter a search term to find {activeTab} across all your conversations
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
