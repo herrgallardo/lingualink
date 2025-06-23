@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 interface PaginationProps {
@@ -15,6 +16,8 @@ export function Pagination({
   onPageChange,
   className = '',
 }: PaginationProps) {
+  const { t } = useTranslation();
+
   if (totalPages <= 1) return null;
 
   const getPageNumbers = () => {
@@ -54,13 +57,16 @@ export function Pagination({
   };
 
   return (
-    <nav className={`flex items-center justify-center gap-1 ${className}`} aria-label="Pagination">
+    <nav
+      className={`flex items-center justify-center gap-1 ${className}`}
+      aria-label={t('common.pagination')}
+    >
       {/* Previous button */}
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
         className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        aria-label="Previous page"
+        aria-label={t('common.previous')}
       >
         <ChevronLeftIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
       </button>
@@ -91,7 +97,7 @@ export function Pagination({
                     : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-transparent'
                 }
               `}
-              aria-label={`Go to page ${pageNumber}`}
+              aria-label={t('navigation.goToPage', { page: pageNumber })}
               aria-current={isActive ? 'page' : undefined}
             >
               {pageNumber}
@@ -105,7 +111,7 @@ export function Pagination({
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
         className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        aria-label="Next page"
+        aria-label={t('common.next')}
       >
         <ChevronRightIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
       </button>
@@ -121,14 +127,13 @@ interface PageInfoProps {
 }
 
 export function PageInfo({ currentPage, pageSize, totalItems, className = '' }: PageInfoProps) {
+  const { t } = useTranslation();
   const start = (currentPage - 1) * pageSize + 1;
   const end = Math.min(currentPage * pageSize, totalItems);
 
   return (
     <div className={`text-sm text-slate-600 dark:text-slate-400 ${className}`}>
-      Showing <span className="font-medium">{start}</span> to{' '}
-      <span className="font-medium">{end}</span> of{' '}
-      <span className="font-medium">{totalItems}</span> results
+      {t('search.showingResults', { start, end, total: totalItems })}
     </div>
   );
 }

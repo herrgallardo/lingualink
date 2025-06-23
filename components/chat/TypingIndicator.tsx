@@ -1,22 +1,26 @@
 'use client';
 
+import { useTranslation } from '@/lib/i18n/useTranslation';
+
 interface TypingIndicatorProps {
   users: string[];
   className?: string;
 }
 
 export function TypingIndicator({ users, className = '' }: TypingIndicatorProps) {
+  const { t } = useTranslation();
+
   if (users.length === 0) {
     return null;
   }
 
   const getTypingText = () => {
     if (users.length === 1) {
-      return `${users[0]} is typing`;
+      return t('presence.isTyping', { name: users[0] });
     } else if (users.length === 2) {
-      return `${users[0]} and ${users[1]} are typing`;
+      return t('presence.areTyping', { names: `${users[0]} ${t('common.and')} ${users[1]}` });
     } else {
-      return `${users[0]} and ${users.length - 1} others are typing`;
+      return t('chat.andOthersTyping', { count: users.length - 1 });
     }
   };
 

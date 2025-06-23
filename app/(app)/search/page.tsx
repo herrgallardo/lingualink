@@ -6,6 +6,7 @@ import { SearchInput } from '@/components/search/SearchInput';
 import { ChatResults, MessageResults, UserResults } from '@/components/search/SearchResults';
 import { ChatListSkeleton, MessageSkeleton, UserListSkeleton } from '@/components/ui/Skeleton';
 import { useSupabase } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { SearchService, type SearchFilters as SearchFiltersType } from '@/lib/services/search';
 import type { Database } from '@/lib/types/database';
 import { useRouter } from 'next/navigation';
@@ -25,6 +26,7 @@ export default function SearchPage() {
   const [searching, setSearching] = useState(false);
   const [filters, setFilters] = useState<SearchFiltersType>({});
   const [currentPage, setCurrentPage] = useState(1);
+  const { t } = useTranslation();
 
   // Results state
   const [messageResults, setMessageResults] = useState<{
@@ -139,9 +141,13 @@ export default function SearchPage() {
   };
 
   const tabs = [
-    { id: 'messages' as const, label: 'Messages', count: messageResults.totalCount },
-    { id: 'chats' as const, label: 'Chats', count: chatResults.totalCount },
-    { id: 'users' as const, label: 'Users', count: userResults.totalCount },
+    {
+      id: 'messages' as const,
+      label: t('search.messageResults'),
+      count: messageResults.totalCount,
+    },
+    { id: 'chats' as const, label: t('search.chatResults'), count: chatResults.totalCount },
+    { id: 'users' as const, label: t('search.userResults'), count: userResults.totalCount },
   ];
 
   const getCurrentResults = () => {
@@ -171,14 +177,14 @@ export default function SearchPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      <h1 className="text-2xl font-bold text-cyan-600 mb-6">Search</h1>
+      <h1 className="text-2xl font-bold text-cyan-600 mb-6">{t('search.title')}</h1>
 
       {/* Search input */}
       <div className="mb-6">
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search messages, chats, and users..."
+          placeholder={t('search.messagePlaceholder')}
           size="large"
           autoFocus
           loading={searching}
@@ -269,21 +275,21 @@ export default function SearchPage() {
           ) : debouncedSearch && !searching ? (
             <div className="text-center py-12">
               <p className="text-slate-500">
-                No {activeTab} found for &quot;{debouncedSearch}&quot;
+                {t('search.noResultsFor', { query: debouncedSearch })}
               </p>
               {activeTab === 'messages' && Object.keys(filters).length > 0 && (
                 <button
                   onClick={resetFilters}
                   className="mt-4 text-cyan-600 hover:text-cyan-700 font-medium"
                 >
-                  Clear filters and try again
+                  {t('search.clearFiltersAndTry')}
                 </button>
               )}
             </div>
           ) : (
             <div className="text-center py-12">
               <p className="text-slate-500">
-                Enter a search term to find {activeTab} across all your conversations
+                {t('search.enterSearchTerm', { type: t(`search.${activeTab}`) })}
               </p>
             </div>
           )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { usePresence } from '@/lib/hooks/usePresence';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { UserCircleIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import { OnlineStatusIndicator } from './OnlineStatus';
@@ -12,6 +13,7 @@ interface OnlineUsersListProps {
 
 export function OnlineUsersList({ className = '', showCurrentUser = false }: OnlineUsersListProps) {
   const { onlineUsers } = usePresence();
+  const { t } = useTranslation();
 
   // Filter out current user if needed
   const displayUsers = showCurrentUser
@@ -21,7 +23,7 @@ export function OnlineUsersList({ className = '', showCurrentUser = false }: Onl
   if (displayUsers.length === 0) {
     return (
       <div className={`text-center py-8 ${className}`}>
-        <p className="text-sm text-slate-500">No users online</p>
+        <p className="text-sm text-slate-500">{t('presence.noUsersOnline')}</p>
       </div>
     );
   }
@@ -29,7 +31,7 @@ export function OnlineUsersList({ className = '', showCurrentUser = false }: Onl
   return (
     <div className={`space-y-2 ${className}`}>
       <h3 className="text-sm font-semibold text-midnight-900 dark:text-slate-100 mb-3">
-        Online Users ({displayUsers.length})
+        {t('presence.onlineUsers')} ({displayUsers.length})
       </h3>
 
       <div className="space-y-2">
@@ -43,7 +45,7 @@ export function OnlineUsersList({ className = '', showCurrentUser = false }: Onl
                 {user.avatar_url ? (
                   <Image
                     src={user.avatar_url}
-                    alt={`${user.username} avatar`}
+                    alt={t('common.avatar', { name: user.username })}
                     width={40}
                     height={40}
                     className="object-cover"
@@ -65,7 +67,7 @@ export function OnlineUsersList({ className = '', showCurrentUser = false }: Onl
               <p className="text-sm font-medium text-midnight-900 dark:text-slate-100 truncate">
                 {user.username}
               </p>
-              <p className="text-xs text-slate-500 capitalize">{user.status.replace('-', ' ')}</p>
+              <p className="text-xs text-slate-500 capitalize">{t(`presence.${user.status}`)}</p>
             </div>
           </div>
         ))}
@@ -81,6 +83,7 @@ interface CompactOnlineUsersProps {
 
 export function CompactOnlineUsers({ maxDisplay = 3, className = '' }: CompactOnlineUsersProps) {
   const { onlineUsers } = usePresence();
+  const { t } = useTranslation();
 
   const displayUsers = onlineUsers.slice(0, maxDisplay);
   const remainingCount = Math.max(0, onlineUsers.length - maxDisplay);
@@ -121,7 +124,9 @@ export function CompactOnlineUsers({ maxDisplay = 3, className = '' }: CompactOn
         )}
       </div>
 
-      <span className="text-xs text-slate-500 ml-2">{onlineUsers.length} online</span>
+      <span className="text-xs text-slate-500 ml-2">
+        {t('presence.onlineCount', { count: onlineUsers.length })}
+      </span>
     </div>
   );
 }

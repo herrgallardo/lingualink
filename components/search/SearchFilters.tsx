@@ -1,6 +1,7 @@
 'use client';
 
 import { useSupabase } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { SearchFilters } from '@/lib/services/search';
 import type { Database } from '@/lib/types/database';
 import {
@@ -32,6 +33,7 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
   const [users, setUsers] = useState<FilterUser[]>([]);
   const [chats, setChats] = useState<FilterChat[]>([]);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   // Load users and chats for filter options
   useEffect(() => {
@@ -150,10 +152,12 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-midnight-900 dark:text-slate-100">Filters</span>
+          <span className="font-medium text-midnight-900 dark:text-slate-100">
+            {t('search.filters')}
+          </span>
           {hasActiveFilters && (
             <span className="px-2 py-0.5 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-400 text-xs rounded-full">
-              Active
+              {t('common.active')}
             </span>
           )}
         </div>
@@ -173,7 +177,7 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-midnight-900 dark:text-slate-100 mb-2">
               <CalendarIcon className="w-4 h-4" />
-              Date Range
+              {t('search.dateRange')}
             </label>
             <div className="grid grid-cols-2 gap-2">
               <input
@@ -196,7 +200,7 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-midnight-900 dark:text-slate-100 mb-2">
                 <UserIcon className="w-4 h-4" />
-                Senders
+                {t('search.senders')}
               </label>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {users.map((user) => (
@@ -221,14 +225,15 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-midnight-900 dark:text-slate-100 mb-2">
                 <ChatBubbleLeftRightIcon className="w-4 h-4" />
-                Chats
+                {t('common.chats')}
               </label>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {chats.map((chat) => {
                   const otherParticipants = (chat.other_participants || []) as Array<{
                     username: string;
                   }>;
-                  const chatName = otherParticipants.map((p) => p.username).join(', ') || 'Chat';
+                  const chatName =
+                    otherParticipants.map((p) => p.username).join(', ') || t('common.chat');
 
                   return (
                     <label key={chat.id} className="flex items-center gap-2 cursor-pointer">
@@ -258,7 +263,9 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
                 className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
               />
               <PaperClipIcon className="w-4 h-4 text-slate-500" />
-              <span className="text-sm text-midnight-900 dark:text-slate-100">Has attachments</span>
+              <span className="text-sm text-midnight-900 dark:text-slate-100">
+                {t('search.hasAttachments')}
+              </span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer">
@@ -268,7 +275,9 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
                 onChange={(e) => handleUnreadOnlyChange(e.target.checked)}
                 className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
               />
-              <span className="text-sm text-midnight-900 dark:text-slate-100">Unread only</span>
+              <span className="text-sm text-midnight-900 dark:text-slate-100">
+                {t('search.unreadOnly')}
+              </span>
             </label>
           </div>
 
@@ -279,7 +288,7 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
               className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-2"
             >
               <XMarkIcon className="w-4 h-4" />
-              Clear Filters
+              {t('search.clearFilters')}
             </button>
           )}
         </div>

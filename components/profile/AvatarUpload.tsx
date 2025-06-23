@@ -1,6 +1,7 @@
 'use client';
 
 import { useSupabase } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { cleanupOldAvatars, uploadAvatar } from '@/lib/utils/avatar-upload';
 import { CameraIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
@@ -25,6 +26,7 @@ export function AvatarUpload({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = useSupabase();
+  const { t } = useTranslation();
 
   const sizeClasses = {
     small: 'w-16 h-16',
@@ -68,10 +70,10 @@ export function AvatarUpload({
         // Cleanup old avatars in the background
         cleanupOldAvatars(supabase, userId, 3).catch(console.error);
       } else {
-        setError(result.error || 'Failed to upload avatar');
+        setError(result.error || t('profile.failedToUploadPhoto'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload avatar');
+      setError(err instanceof Error ? err.message : t('profile.failedToUploadPhoto'));
     } finally {
       setUploading(false);
     }
@@ -106,7 +108,7 @@ export function AvatarUpload({
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
           className="absolute bottom-0 right-0 p-2 bg-primary text-white rounded-full shadow-lg hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Upload avatar"
+          aria-label={t('profile.uploadPhoto')}
         >
           <CameraIcon className="w-4 h-4" />
         </button>
@@ -124,12 +126,14 @@ export function AvatarUpload({
         accept="image/jpeg,image/png,image/gif,image/webp"
         onChange={handleFileSelect}
         className="hidden"
-        aria-label="Avatar file input"
+        aria-label={t('common.file')}
       />
 
       {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <p className="mt-2 text-xs text-slate-500">Max 2MB • JPEG, PNG, GIF, or WebP</p>
+      <p className="mt-2 text-xs text-slate-500">
+        {t('profile.maxSize', { size: '2MB' })} • {t('profile.acceptedFormats')}
+      </p>
     </div>
   );
 }

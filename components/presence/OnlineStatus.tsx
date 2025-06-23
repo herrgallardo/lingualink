@@ -1,6 +1,7 @@
 'use client';
 
 import { usePresenceContext } from '@/lib/context/presence-context';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { isUserOnlineByLastSeen } from '@/lib/services/presence';
 import type { Database } from '@/lib/types/database';
 
@@ -64,10 +65,12 @@ export function OnlineStatusIndicator({
     }
   };
 
+  const { t } = useTranslation();
+
   return (
     <span
       className={`inline-block rounded-full ${sizeClasses[size]} ${getStatusColor()} ${className}`}
-      aria-label={`Status: ${isOnline ? status : 'offline'}`}
+      aria-label={`${t('presence.status')}: ${isOnline ? t(`presence.${status}`) : t('presence.offline')}`}
     />
   );
 }
@@ -88,6 +91,7 @@ export function OnlineStatusBadge({
   className = '',
 }: OnlineStatusBadgeProps) {
   const { isUserOnline } = usePresenceContext();
+  const { t } = useTranslation();
 
   const isOnline = userId
     ? isUserOnline(userId)
@@ -96,19 +100,19 @@ export function OnlineStatusBadge({
       : false;
 
   const getStatusLabel = () => {
-    if (!isOnline) return 'Offline';
+    if (!isOnline) return t('presence.offline');
 
     switch (status) {
       case 'available':
-        return 'Available';
+        return t('presence.available');
       case 'busy':
-        return 'Busy';
+        return t('presence.busy');
       case 'do-not-disturb':
-        return 'Do Not Disturb';
+        return t('presence.doNotDisturb');
       case 'invisible':
-        return 'Invisible';
+        return t('presence.invisible');
       default:
-        return 'Unknown';
+        return t('common.unknown');
     }
   };
 
@@ -164,8 +168,10 @@ interface LastSeenTextProps {
 }
 
 export function LastSeenText({ lastSeen, className = '' }: LastSeenTextProps) {
+  const { t } = useTranslation();
+
   if (!lastSeen) {
-    return <span className={`text-xs text-slate-500 ${className}`}>Never seen</span>;
+    return <span className={`text-xs text-slate-500 ${className}`}>{t('presence.neverSeen')}</span>;
   }
 
   const formatLastSeen = (date: string): string => {
@@ -177,15 +183,15 @@ export function LastSeenText({ lastSeen, className = '' }: LastSeenTextProps) {
     const diffDays = Math.floor(diffHours / 24);
 
     if (diffMinutes < 1) {
-      return 'Just now';
+      return t('presence.justNow');
     } else if (diffMinutes < 60) {
-      return `${diffMinutes}m ago`;
+      return t('presence.minutesAgo', { count: diffMinutes });
     } else if (diffHours < 24) {
-      return `${diffHours}h ago`;
+      return t('presence.hoursAgo', { count: diffHours });
     } else if (diffDays < 7) {
-      return `${diffDays}d ago`;
+      return t('presence.daysAgo', { count: diffDays });
     } else {
-      return lastSeenDate.toLocaleDateString();
+      return t('presence.lastSeenDate', { date: lastSeenDate.toLocaleDateString() });
     }
   };
 
@@ -195,7 +201,9 @@ export function LastSeenText({ lastSeen, className = '' }: LastSeenTextProps) {
     <span
       className={`text-xs ${isOnline ? 'text-green-600 dark:text-green-400' : 'text-slate-500'} ${className}`}
     >
-      {isOnline ? 'Active now' : `Last seen ${formatLastSeen(lastSeen)}`}
+      {isOnline
+        ? t('presence.activeNow')
+        : t('presence.lastSeen', { time: formatLastSeen(lastSeen) })}
     </span>
   );
 }
