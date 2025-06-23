@@ -18,14 +18,19 @@ interface SearchFiltersProps {
   onReset: () => void;
 }
 
-type User = Database['public']['Tables']['users']['Row'];
-type Chat = Database['public']['Views']['chat_list']['Row'];
+// Minimal types for filter data
+type FilterUser = {
+  id: string;
+  username: string;
+};
+
+type FilterChat = Database['public']['Views']['chat_list']['Row'];
 
 export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFiltersProps) {
   const supabase = useSupabase();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [users, setUsers] = useState<FilterUser[]>([]);
+  const [chats, setChats] = useState<FilterChat[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Load users and chats for filter options
@@ -33,13 +38,15 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
     const loadFilterData = async () => {
       setLoading(true);
       try {
-        // Load users
+        // Load users (only id and username needed)
         const { data: userData } = await supabase
           .from('users')
           .select('id, username')
           .order('username');
 
-        if (userData) setUsers(userData);
+        if (userData) {
+          setUsers(userData as FilterUser[]);
+        }
 
         // Load chats
         const { data: chatData } = await supabase
@@ -47,7 +54,9 @@ export function SearchFilters({ filters, onFiltersChange, onReset }: SearchFilte
           .select('*')
           .order('updated_at', { ascending: false });
 
-        if (chatData) setChats(chatData);
+        if (chatData) {
+          setChats(chatData);
+        }
       } catch (error) {
         console.error('Failed to load filter data:', error);
       } finally {

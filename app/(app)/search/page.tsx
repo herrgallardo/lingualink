@@ -9,7 +9,7 @@ import { useSupabase } from '@/lib/hooks/useSupabase';
 import { SearchService, type SearchFilters as SearchFiltersType } from '@/lib/services/search';
 import type { Database } from '@/lib/types/database';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type SearchTab = 'messages' | 'chats' | 'users';
 type MessageSearchResult = Database['public']['Functions']['search_messages']['Returns'][0];
@@ -47,7 +47,9 @@ export default function SearchPage() {
 
   const supabase = useSupabase();
   const router = useRouter();
-  const searchService = new SearchService(supabase);
+
+  // Memoize the search service to prevent recreating on every render
+  const searchService = useMemo(() => new SearchService(supabase), [supabase]);
 
   // Debounce search input
   useEffect(() => {
@@ -60,17 +62,6 @@ export default function SearchPage() {
   }, [search]);
 
   // Perform search when debounced value changes
-  useEffect(() => {
-    if (debouncedSearch.trim()) {
-      performSearch();
-    } else {
-      // Clear results if search is empty
-      setMessageResults({ data: [], totalCount: 0, totalPages: 0 });
-      setChatResults({ data: [], totalCount: 0, totalPages: 0 });
-      setUserResults({ data: [], totalCount: 0, totalPages: 0 });
-    }
-  }, [debouncedSearch, activeTab, filters, currentPage]);
-
   const performSearch = useCallback(async () => {
     if (!debouncedSearch.trim()) return;
 
@@ -115,6 +106,18 @@ export default function SearchPage() {
       setSearching(false);
     }
   }, [debouncedSearch, activeTab, filters, currentPage, searchService]);
+
+  // Effect to perform search
+  useEffect(() => {
+    if (debouncedSearch.trim()) {
+      performSearch();
+    } else {
+      // Clear results if search is empty
+      setMessageResults({ data: [], totalCount: 0, totalPages: 0 });
+      setChatResults({ data: [], totalCount: 0, totalPages: 0 });
+      setUserResults({ data: [], totalCount: 0, totalPages: 0 });
+    }
+  }, [debouncedSearch, activeTab, filters, currentPage, performSearch]);
 
   const handleUserClick = async (userId: string) => {
     try {
