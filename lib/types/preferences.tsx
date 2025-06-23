@@ -13,6 +13,9 @@ export interface UserPreferences {
   // Notification Preferences
   notificationSounds: boolean;
   messagePreview: boolean;
+  pushNotifications: boolean;
+  emailNotifications: boolean;
+  desktopNotifications: boolean;
   soundVolume: number; // 0-1
 
   // Chat Preferences
@@ -30,6 +33,9 @@ export const defaultPreferences: UserPreferences = {
   messageGrouping: true,
   notificationSounds: true,
   messagePreview: true,
+  pushNotifications: true,
+  emailNotifications: false,
+  desktopNotifications: true,
   soundVolume: 0.5,
   showTypingIndicator: true,
   autoTranslate: true,
@@ -55,6 +61,9 @@ export function isValidPreferences(prefs: unknown): prefs is UserPreferences {
     typeof p.messageGrouping === 'boolean' &&
     typeof p.notificationSounds === 'boolean' &&
     typeof p.messagePreview === 'boolean' &&
+    typeof p.pushNotifications === 'boolean' &&
+    typeof p.emailNotifications === 'boolean' &&
+    typeof p.desktopNotifications === 'boolean' &&
     typeof p.soundVolume === 'number' &&
     p.soundVolume >= 0 &&
     p.soundVolume <= 1 &&
