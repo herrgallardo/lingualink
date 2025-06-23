@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/context/auth-context';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import {
   ArrowRightStartOnRectangleIcon,
   ChatBubbleLeftRightIcon,
@@ -35,6 +36,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const { t } = useTranslation();
 
   // Focus input when opened
   useEffect(() => {
@@ -48,8 +50,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const commands: Command[] = [
     {
       id: 'chats',
-      name: 'Go to Chats',
-      description: 'View all your conversations',
+      name: t('navigation.chats'),
+      description: t('chat.viewAllChats'),
       icon: ChatBubbleLeftRightIcon,
       action: () => {
         router.push('/chat');
@@ -58,8 +60,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'new-chat',
-      name: 'Start New Chat',
-      description: 'Create a new conversation',
+      name: t('chat.startNewChat'),
+      description: t('chat.createNewConversation'),
       icon: PlusIcon,
       action: () => {
         router.push('/chat/new');
@@ -69,8 +71,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'search',
-      name: 'Search Messages',
-      description: 'Find messages across all chats',
+      name: t('search.searchMessages'),
+      description: t('search.findMessages'),
       icon: MagnifyingGlassIcon,
       action: () => {
         router.push('/search');
@@ -80,8 +82,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'users',
-      name: 'Browse Users',
-      description: 'Find and connect with users',
+      name: t('users.browseUsers'),
+      description: t('users.findAndConnect'),
       icon: UserGroupIcon,
       action: () => {
         router.push('/users');
@@ -90,8 +92,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'profile',
-      name: 'Profile Settings',
-      description: 'Manage your profile and preferences',
+      name: t('profile.profileSettings'),
+      description: t('profile.manageProfile'),
       icon: UserCircleIcon,
       action: () => {
         router.push('/profile');
@@ -101,8 +103,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'toggle-theme',
-      name: 'Toggle Dark Mode',
-      description: 'Switch between light and dark theme',
+      name: t('settings.theme'),
+      description: t('settings.switchTheme'),
       icon: document.documentElement.classList.contains('dark') ? SunIcon : MoonIcon,
       action: () => {
         document.documentElement.classList.toggle('dark');
@@ -112,8 +114,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'preferences',
-      name: 'Preferences',
-      description: 'Customize your app experience',
+      name: t('settings.preferences'),
+      description: t('settings.customizeApp'),
       icon: Cog6ToothIcon,
       action: () => {
         router.push('/profile#preferences');
@@ -122,8 +124,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'sign-out',
-      name: 'Sign Out',
-      description: 'Log out of your account',
+      name: t('common.signOut'),
+      description: t('auth.logoutAccount'),
       icon: ArrowRightStartOnRectangleIcon,
       action: () => {
         signOut();
@@ -204,7 +206,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 bg-transparent outline-none text-slate-900 dark:text-slate-100 placeholder-slate-500"
-                placeholder="Type a command or search..."
+                placeholder={t('navigation.commandPlaceholder')}
               />
               <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-400 rounded">
                 ESC
@@ -215,7 +217,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           <div className="max-h-96 overflow-y-auto py-2">
             {filteredCommands.length === 0 ? (
               <div className="px-4 py-8 text-center text-slate-500">
-                No commands found for &quot;{search}&quot;
+                {t('search.noResultsFor', { query: search })}
               </div>
             ) : (
               <ul role="list" className="px-2">
@@ -267,17 +269,17 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                   <kbd className="px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-slate-700 dark:text-slate-400 rounded">
                     ↑↓
                   </kbd>
-                  Navigate
+                  {t('navigation.navigate')}
                 </span>
                 <span className="flex items-center gap-1">
                   <kbd className="px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-slate-700 dark:text-slate-400 rounded">
                     ↵
                   </kbd>
-                  Select
+                  {t('common.select')}
                 </span>
               </div>
               <span className="flex items-center gap-1">
-                Open with
+                {t('navigation.openWith')}
                 <kbd className="px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-slate-700 dark:text-slate-400 rounded">
                   ⌘K
                 </kbd>

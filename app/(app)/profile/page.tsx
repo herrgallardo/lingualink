@@ -8,6 +8,7 @@ import { UIPreferences } from '@/components/profile/UIPreferences';
 import { useAuth } from '@/lib/context/auth-context';
 import { usePreferences } from '@/lib/hooks/usePreferences';
 import { useProfile, useSupabase } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Database } from '@/lib/types/database';
 import { ArrowLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { useRouter } from 'next/navigation';
@@ -21,6 +22,7 @@ export default function ProfilePage() {
   const { profile, loading: profileLoading } = useProfile();
   const supabase = useSupabase();
   const { preferences, updatePreference, saving: preferencesSaving } = usePreferences(user?.id);
+  const { t } = useTranslation();
 
   const [saving, setSaving] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
@@ -62,7 +64,11 @@ export default function ProfilePage() {
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save profile');
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('errors.failedToUpdate', { resource: t('profile.title') }),
+      );
     } finally {
       setSaving(false);
     }
@@ -73,7 +79,7 @@ export default function ProfilePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto"></div>
-          <p className="mt-4 text-teal-700 dark:text-teal-400">Loading profile...</p>
+          <p className="mt-4 text-teal-700 dark:text-teal-400">{t('profile.loadingProfile')}</p>
         </div>
       </div>
     );
@@ -88,11 +94,11 @@ export default function ProfilePage() {
             <button
               onClick={() => router.push('/chat')}
               className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-              aria-label="Back to chat"
+              aria-label={t('common.back')}
             >
               <ArrowLeftIcon className="w-5 h-5 text-cyan-600" />
             </button>
-            <h1 className="text-3xl font-bold text-cyan-600">Profile Settings</h1>
+            <h1 className="text-3xl font-bold text-cyan-600">{t('profile.profileSettings')}</h1>
           </div>
         </div>
 
@@ -108,7 +114,7 @@ export default function ProfilePage() {
             {/* Avatar Section */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
-                Profile Picture
+                {t('profile.profilePicture')}
               </h2>
               <AvatarUpload
                 userId={user.id}
@@ -122,12 +128,12 @@ export default function ProfilePage() {
             {/* Account Info */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
-                Account Information
+                {t('profile.accountInfo')}
               </h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
-                    Username
+                    {t('profile.username')}
                   </label>
                   <p className="text-midnight-900 dark:text-slate-100 font-medium">
                     {profile.username}
@@ -135,13 +141,13 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
-                    Email
+                    {t('profile.email')}
                   </label>
                   <p className="text-midnight-900 dark:text-slate-100">{profile.email}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
-                    Current Status
+                    {t('profile.currentStatus')}
                   </label>
                   <OnlineStatusBadge
                     userId={user.id}
@@ -151,7 +157,7 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-teal-700 dark:text-teal-400 mb-1">
-                    Member Since
+                    {t('profile.memberSince')}
                   </label>
                   <p className="text-midnight-900 dark:text-slate-100">
                     {new Date(profile.created_at).toLocaleDateString()}
@@ -166,7 +172,7 @@ export default function ProfilePage() {
             {/* Communication Preferences */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-6">
-                Communication Preferences
+                {t('settings.communicationPreferences')}
               </h2>
               <div className="space-y-6">
                 <LanguageSelector
@@ -195,7 +201,7 @@ export default function ProfilePage() {
           {showSaveSuccess && (
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400 animate-fade-in">
               <CheckIcon className="w-5 h-5" />
-              <span>Profile saved successfully!</span>
+              <span>{t('common.changesSaved')}</span>
             </div>
           )}
 
@@ -204,7 +210,7 @@ export default function ProfilePage() {
             disabled={saving}
             className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? t('common.saving') : t('common.saveChanges')}
           </button>
         </div>
       </div>

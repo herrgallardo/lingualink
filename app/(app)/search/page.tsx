@@ -1,6 +1,7 @@
 'use client';
 
 import { MessageSkeleton } from '@/components/ui/Skeleton';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 
@@ -18,6 +19,7 @@ export default function SearchPage() {
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const { t } = useTranslation();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +35,7 @@ export default function SearchPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold text-cyan-600 mb-6">Search Messages</h1>
+      <h1 className="text-2xl font-bold text-cyan-600 mb-6">{t('search.searchMessages')}</h1>
 
       {/* Search form */}
       <form onSubmit={handleSearch} className="mb-8">
@@ -43,7 +45,7 @@ export default function SearchPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search across all your messages..."
+            placeholder={t('search.messagePlaceholder')}
             className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-midnight-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
           />
           <button
@@ -51,7 +53,7 @@ export default function SearchPage() {
             disabled={searching || !search.trim()}
             className="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-1.5 bg-primary text-white rounded-md font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Search
+            {t('common.search')}
           </button>
         </div>
       </form>
@@ -80,13 +82,11 @@ export default function SearchPage() {
       ) : search && !searching ? (
         <div className="text-center py-12">
           <MagnifyingGlassIcon className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500">No messages found for &quot;{search}&quot;</p>
+          <p className="text-slate-500">{t('search.noResultsFor', { query: search })}</p>
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-slate-500">
-            Enter a search term to find messages across all your chats
-          </p>
+          <p className="text-slate-500">{t('search.searchEverything')}</p>
         </div>
       )}
     </div>

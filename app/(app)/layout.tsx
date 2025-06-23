@@ -1,8 +1,10 @@
+// app/(app)/layout.tsx
 'use client';
 
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useAuth } from '@/lib/context/auth-context';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -15,6 +17,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const { t } = useTranslation();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -48,7 +51,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto"></div>
-          <p className="mt-4 text-teal-700 dark:text-teal-400">Loading...</p>
+          <p className="mt-4 text-teal-700 dark:text-teal-400">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -72,7 +75,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Open sidebar"
+                aria-label={t('navigation.openSidebar')}
               >
                 <svg
                   className="w-6 h-6 text-slate-600 dark:text-slate-400"
@@ -94,7 +97,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <button
                 onClick={() => setCommandPaletteOpen(true)}
                 className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Open command palette"
+                aria-label={t('navigation.openCommandPalette')}
               >
                 <svg
                   className="w-6 h-6 text-slate-600 dark:text-slate-400"

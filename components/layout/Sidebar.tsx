@@ -3,6 +3,7 @@
 import { CompactOnlineUsers } from '@/components/presence/OnlineUsersList';
 import { useAuth } from '@/lib/context/auth-context';
 import { useProfile } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import {
   ArrowRightStartOnRectangleIcon,
   ChatBubbleLeftRightIcon,
@@ -28,6 +29,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { signOut } = useAuth();
   const { profile } = useProfile();
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   // Close sidebar on outside click (mobile)
   useEffect(() => {
@@ -55,31 +57,31 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const navigationItems = [
     {
-      name: 'Chats',
+      name: t('navigation.chats'),
       href: '/chat',
       icon: ChatBubbleLeftRightIcon,
       active: pathname.startsWith('/chat'),
     },
     {
-      name: 'New Chat',
+      name: t('navigation.newChat'),
       href: '/chat/new',
       icon: PlusIcon,
       active: pathname === '/chat/new',
     },
     {
-      name: 'Search',
+      name: t('navigation.search'),
       href: '/search',
       icon: MagnifyingGlassIcon,
       active: pathname.startsWith('/search'),
     },
     {
-      name: 'Users',
+      name: t('navigation.users'),
       href: '/users',
       icon: UserGroupIcon,
       active: pathname.startsWith('/users'),
     },
     {
-      name: 'Profile',
+      name: t('navigation.profile'),
       href: '/profile',
       icon: Cog6ToothIcon,
       active: pathname.startsWith('/profile'),
@@ -121,7 +123,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors lg:hidden"
-              aria-label="Close sidebar"
+              aria-label={t('common.close')}
             >
               <XMarkIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
@@ -189,7 +191,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               className="flex items-center gap-3 w-full px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition-colors"
             >
               <ArrowRightStartOnRectangleIcon className="w-5 h-5" />
-              Sign Out
+              {t('common.signOut')}
             </button>
           </div>
         </div>

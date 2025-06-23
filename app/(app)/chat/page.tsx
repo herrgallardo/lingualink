@@ -2,6 +2,7 @@
 
 import { ChatListSkeleton } from '@/components/ui/Skeleton';
 import { useSupabase } from '@/lib/hooks/useSupabase';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Database } from '@/lib/types/database';
 import { ChatBubbleLeftRightIcon, PlusIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ export default function ChatListPage() {
   const [chats, setChats] = useState<ChatListView[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = useSupabase();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const loadChats = async () => {
@@ -51,7 +53,7 @@ export default function ChatListPage() {
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto p-4">
-        <h1 className="text-2xl font-bold text-cyan-600 mb-6">Your Chats</h1>
+        <h1 className="text-2xl font-bold text-cyan-600 mb-6">{t('chat.yourChats')}</h1>
         <ChatListSkeleton />
       </div>
     );
@@ -60,21 +62,19 @@ export default function ChatListPage() {
   if (chats.length === 0) {
     return (
       <div className="max-w-4xl mx-auto p-4">
-        <h1 className="text-2xl font-bold text-cyan-600 mb-6">Your Chats</h1>
+        <h1 className="text-2xl font-bold text-cyan-600 mb-6">{t('chat.yourChats')}</h1>
         <div className="text-center py-12">
           <ChatBubbleLeftRightIcon className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-2">
-            No chats yet
+            {t('chat.noChatsYet')}
           </h2>
-          <p className="text-teal-700 dark:text-teal-400 mb-6">
-            Start a conversation to begin chatting across languages
-          </p>
+          <p className="text-teal-700 dark:text-teal-400 mb-6">{t('chat.noChatsDescription')}</p>
           <Link
             href="/chat/new"
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-hover transition-colors"
           >
             <PlusIcon className="w-5 h-5" />
-            Start New Chat
+            {t('chat.startNewChat')}
           </Link>
         </div>
       </div>
@@ -84,13 +84,13 @@ export default function ChatListPage() {
   return (
     <div className="max-w-4xl mx-auto p-4">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-cyan-600">Your Chats</h1>
+        <h1 className="text-2xl font-bold text-cyan-600">{t('chat.yourChats')}</h1>
         <Link
           href="/chat/new"
           className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-hover transition-colors"
         >
           <PlusIcon className="w-5 h-5" />
-          New Chat
+          {t('chat.newChat')}
         </Link>
       </div>
 
@@ -115,7 +115,7 @@ export default function ChatListPage() {
             >
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold text-midnight-900 dark:text-slate-100">
-                  {otherParticipants.map((p) => p.username).join(', ') || 'Chat'}
+                  {otherParticipants.map((p) => p.username).join(', ') || t('chat.title')}
                 </h3>
                 {chat.unread_count > 0 && (
                   <span className="px-2 py-1 bg-cyan-500 text-white text-xs rounded-full">
