@@ -1,5 +1,6 @@
 'use client';
 
+import { MessageEditor } from '@/components/chat/MessageEditor';
 import { useAuth } from '@/lib/context/auth-context';
 import { usePreferencesContext } from '@/lib/context/preferences-context';
 import { useProfile } from '@/lib/hooks/useSupabase';
@@ -32,8 +33,8 @@ interface MessageProps {
   showDateSeparator?: boolean;
   isGrouped?: boolean;
   previousMessage?: MessageRow | null;
-  onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
+  onEdit?: (messageId: string, newText: string) => void | Promise<void>;
+  onDelete?: (messageId: string) => void | Promise<void>;
   onReply?: (message: MessageRow) => void;
   onReaction?: (messageId: string, emoji: string) => void;
   reactions?: ReactionRow[];
@@ -63,6 +64,7 @@ export function Message({
   const [showMenu, setShowMenu] = useState(false);
   const [showTranslation, setShowTranslation] = useState(preferences.autoTranslate);
   const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const isOwnMessage = user?.id === sender.id;
   const messageDate = new Date(message.timestamp);
@@ -83,7 +85,7 @@ export function Message({
       setShowMenu(false);
       switch (action) {
         case 'edit':
-          onEdit?.(message.id);
+          setIsEditing(true);
           break;
         case 'delete':
           onDelete?.(message.id);
@@ -93,7 +95,21 @@ export function Message({
           break;
       }
     },
-    [message, onEdit, onDelete, onReply],
+    [message, onDelete, onReply],
+  );
+
+  const handleSaveEdit = useCallback(
+    async (newText: string) => {
+      if (onEdit) {
+        try {
+          await onEdit(message.id, newText);
+          setIsEditing(false);
+        } catch (error) {
+          console.error('Failed to edit message:', error);
+        }
+      }
+    },
+    [onEdit, message.id],
   );
 
   const toggleTranslation = useCallback(() => {
@@ -142,113 +158,122 @@ export function Message({
               <span className="text-xs text-slate-500 mb-1 ml-2">{sender.username}</span>
             )}
 
-            {/* Message bubble */}
-            <div className="group relative">
-              <div
-                className={`px-4 py-2 rounded-2xl ${
-                  isOwnMessage
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-midnight-900 dark:text-slate-100'
-                } ${message.deleted_at ? 'italic opacity-60' : ''}`}
-              >
-                {message.deleted_at ? (
-                  <span className="text-sm">{t('chat.messageDeleted')}</span>
-                ) : (
-                  <>
-                    {/* Original or translated text */}
-                    <p className="break-words whitespace-pre-wrap">
-                      {showTranslation && translatedText ? translatedText : message.original_text}
-                    </p>
+            {/* Message bubble or editor */}
+            {isEditing ? (
+              <MessageEditor
+                initialText={message.original_text}
+                onSave={handleSaveEdit}
+                onCancel={() => setIsEditing(false)}
+                className="w-full"
+              />
+            ) : (
+              <div className="group relative">
+                <div
+                  className={`px-4 py-2 rounded-2xl ${
+                    isOwnMessage
+                      ? 'bg-primary text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-midnight-900 dark:text-slate-100'
+                  } ${message.deleted_at ? 'italic opacity-60' : ''}`}
+                >
+                  {message.deleted_at ? (
+                    <span className="text-sm">{t('chat.messageDeleted')}</span>
+                  ) : (
+                    <>
+                      {/* Original or translated text */}
+                      <p className="break-words whitespace-pre-wrap">
+                        {showTranslation && translatedText ? translatedText : message.original_text}
+                      </p>
 
-                    {/* Translation indicator */}
-                    {translatedText && (
+                      {/* Translation indicator */}
+                      {translatedText && (
+                        <button
+                          onClick={toggleTranslation}
+                          className={`flex items-center gap-1 mt-1 text-xs ${
+                            isOwnMessage
+                              ? 'text-cyan-100 hover:text-white'
+                              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                          }`}
+                        >
+                          <LanguageIcon className="w-3 h-3" />
+                          {showTranslation
+                            ? t('chat.showOriginal')
+                            : t('chat.translatedFrom', {
+                                language: getLanguageName(message.original_language),
+                              })}
+                        </button>
+                      )}
+
+                      {/* Edited indicator */}
+                      {message.edited_at && (
+                        <span
+                          className={`text-xs ${isOwnMessage ? 'text-cyan-100' : 'text-slate-500'}`}
+                        >
+                          {t('chat.messageEdited')}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Message menu */}
+                {!message.deleted_at && (
+                  <div className="absolute top-0 right-0 -mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="relative">
                       <button
-                        onClick={toggleTranslation}
-                        className={`flex items-center gap-1 mt-1 text-xs ${
-                          isOwnMessage
-                            ? 'text-cyan-100 hover:text-white'
-                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-1 bg-white dark:bg-slate-700 rounded-full shadow-md hover:bg-slate-50 dark:hover:bg-slate-600"
                       >
-                        <LanguageIcon className="w-3 h-3" />
-                        {showTranslation
-                          ? t('chat.showOriginal')
-                          : t('chat.translatedFrom', {
-                              language: getLanguageName(message.original_language),
-                            })}
+                        <EllipsisHorizontalIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                       </button>
-                    )}
 
-                    {/* Edited indicator */}
-                    {message.edited_at && (
-                      <span
-                        className={`text-xs ${isOwnMessage ? 'text-cyan-100' : 'text-slate-500'}`}
-                      >
-                        {t('chat.messageEdited')}
-                      </span>
-                    )}
-                  </>
+                      {showMenu && (
+                        <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10">
+                          {onReply && (
+                            <button
+                              onClick={() => handleMenuAction('reply')}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                            >
+                              <ArrowUturnLeftIcon className="w-4 h-4" />
+                              {t('chat.replyToMessage')}
+                            </button>
+                          )}
+
+                          {isOwnMessage && onEdit && (
+                            <button
+                              onClick={() => handleMenuAction('edit')}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                              {t('chat.editMessage')}
+                            </button>
+                          )}
+
+                          {isOwnMessage && onDelete && (
+                            <button
+                              onClick={() => handleMenuAction('delete')}
+                              className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                              {t('chat.deleteMessage')}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick reaction button */}
+                {!message.deleted_at && onReaction && (
+                  <button
+                    onClick={() => onReaction(message.id, '👍')}
+                    className="absolute -bottom-2 -right-2 p-1 bg-white dark:bg-slate-700 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+                  >
+                    <FaceSmileIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                  </button>
                 )}
               </div>
-
-              {/* Message menu */}
-              {!message.deleted_at && (
-                <div className="absolute top-0 right-0 -mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowMenu(!showMenu)}
-                      className="p-1 bg-white dark:bg-slate-700 rounded-full shadow-md hover:bg-slate-50 dark:hover:bg-slate-600"
-                    >
-                      <EllipsisHorizontalIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                    </button>
-
-                    {showMenu && (
-                      <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10">
-                        {onReply && (
-                          <button
-                            onClick={() => handleMenuAction('reply')}
-                            className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
-                          >
-                            <ArrowUturnLeftIcon className="w-4 h-4" />
-                            {t('chat.replyToMessage')}
-                          </button>
-                        )}
-
-                        {isOwnMessage && onEdit && (
-                          <button
-                            onClick={() => handleMenuAction('edit')}
-                            className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                            {t('chat.editMessage')}
-                          </button>
-                        )}
-
-                        {isOwnMessage && onDelete && (
-                          <button
-                            onClick={() => handleMenuAction('delete')}
-                            className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                            {t('chat.deleteMessage')}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Quick reaction button */}
-              {!message.deleted_at && onReaction && (
-                <button
-                  onClick={() => onReaction(message.id, '👍')}
-                  className="absolute -bottom-2 -right-2 p-1 bg-white dark:bg-slate-700 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
-                >
-                  <FaceSmileIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                </button>
-              )}
-            </div>
+            )}
 
             {/* Reactions */}
             {reactions.length > 0 && onReaction && (

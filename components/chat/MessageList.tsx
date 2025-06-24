@@ -23,8 +23,8 @@ interface MessageListProps {
   reactions: Record<string, ReactionRow[]>;
   readReceipts: Record<string, ReadReceiptRow[]>;
   typingUsers: string[];
-  onEditMessage?: (messageId: string) => void;
-  onDeleteMessage?: (messageId: string) => void;
+  onEditMessage?: (messageId: string, newText: string) => void | Promise<void>;
+  onDeleteMessage?: (messageId: string) => void | Promise<void>;
   onReplyMessage?: (message: MessageRow) => void;
   onReaction?: (messageId: string, emoji: string) => void;
   onLoadMore?: () => void;
@@ -33,7 +33,7 @@ interface MessageListProps {
 }
 
 export function MessageList({
-  chatId: _chatId, // Prefixed with underscore to indicate intentionally unused
+  chatId: _chatId,
   messages,
   participants,
   reactions,
@@ -69,9 +69,8 @@ export function MessageList({
 
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-
-    setAutoScroll(isNearBottom);
     setShowScrollButton(!isNearBottom);
+    setAutoScroll(isNearBottom);
 
     // Load more messages when scrolling to top
     if (scrollTop === 0 && hasMore && !loading) {
@@ -110,29 +109,32 @@ export function MessageList({
 
   // Group messages by sender and time
   const groupedMessages = messages.reduce<
-    Array<{
+    {
       message: MessageRow;
       showDateSeparator: boolean;
       isGrouped: boolean;
-    }>
-  >((grouped, message, index) => {
-    const prevMessage = index > 0 ? messages[index - 1] : null;
-    const messageDate = new Date(message.timestamp);
-    const prevDate = prevMessage ? new Date(prevMessage.timestamp) : null;
+    }[]
+  >(
+    (grouped, message, index) => {
+      const prevMessage = index > 0 ? messages[index - 1] : null;
+      const messageDate = new Date(message.timestamp);
+      const prevDate = prevMessage ? new Date(prevMessage.timestamp) : null;
 
-    // Check if we need a date separator
-    const showDateSeparator = !prevDate || !isSameDay(messageDate, prevDate);
+      // Check if we need a date separator
+      const showDateSeparator = !prevDate || !isSameDay(messageDate, prevDate);
 
-    // Check if message should be grouped with previous
-    let isGrouped = false;
-    if (preferences.messageGrouping && prevMessage && !showDateSeparator) {
-      const timeDiff = messageDate.getTime() - prevDate.getTime();
-      isGrouped = prevMessage.sender_id === message.sender_id && timeDiff < 60000; // 1 minute
-    }
+      // Check if message should be grouped with previous
+      let isGrouped = false;
+      if (preferences.messageGrouping && prevMessage && !showDateSeparator) {
+        const timeDiff = messageDate.getTime() - prevDate.getTime();
+        isGrouped = prevMessage.sender_id === message.sender_id && timeDiff < 60000; // 1 minute
+      }
 
-    grouped.push({ message, showDateSeparator, isGrouped });
-    return grouped;
-  }, []);
+      grouped.push({ message, showDateSeparator, isGrouped });
+      return grouped;
+    },
+    [], // typed as the array of grouped items by the generic above
+  );
 
   // Get participant map
   const participantMap = participants.reduce<Record<string, UserRow>>((map, participant) => {
@@ -178,7 +180,6 @@ export function MessageList({
           const messageReadReceipts = readReceipts[message.id] || [];
           const readBy = messageReadReceipts.map((r) => r.user_id);
 
-          // Get previous message safely
           const previousMessage = index > 0 ? messages[index - 1] : null;
 
           return (
