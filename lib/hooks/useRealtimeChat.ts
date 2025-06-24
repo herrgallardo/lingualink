@@ -60,6 +60,13 @@ export function useRealtimeChat({
   const serviceRef = useRef<RealtimeMessagesService | null>(null);
   const soundManager = getSoundManager();
   const notificationService = getNotificationService(supabase);
+  const participantsRef = useRef<UserRow[]>([]);
+  const hasInitializedRef = useRef(false);
+
+  // Update participants ref when participants change
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
 
   // Initialize realtime service
   useEffect(() => {
@@ -73,6 +80,7 @@ export function useRealtimeChat({
 
     return () => {
       service.cleanup();
+      hasInitializedRef.current = false;
     };
   }, [user, chatId, supabase, notificationService]);
 
@@ -92,6 +100,7 @@ export function useRealtimeChat({
 
       if (participantError) throw participantError;
       setParticipants(participantData || []);
+      participantsRef.current = participantData || [];
 
       // Load messages
       const { data: messageData, error: messageError } = await supabase
@@ -158,7 +167,9 @@ export function useRealtimeChat({
 
   // Subscribe to realtime updates
   useEffect(() => {
-    if (!user || !chatId || !serviceRef.current) return;
+    if (!user || !chatId || !serviceRef.current || hasInitializedRef.current) return;
+
+    hasInitializedRef.current = true;
 
     const subscribe = async () => {
       await serviceRef.current?.subscribe(chatId, {
@@ -183,7 +194,7 @@ export function useRealtimeChat({
 
           // Create notification for messages from others
           if (message.sender_id !== user.id) {
-            const sender = participants.find((p) => p.id === message.sender_id);
+            const sender = participantsRef.current.find((p) => p.id === message.sender_id);
             if (sender) {
               notificationService.createNotification({
                 userId: user.id,
@@ -240,7 +251,6 @@ export function useRealtimeChat({
     onNewMessage,
     playMessageSound,
     soundManager,
-    participants,
     notificationService,
   ]);
 
@@ -380,6 +390,7 @@ export function useRealtimeChat({
   const refresh = useCallback(async () => {
     setPage(0);
     setHasMore(true);
+    hasInitializedRef.current = false;
     await loadInitialData();
   }, [loadInitialData]);
 

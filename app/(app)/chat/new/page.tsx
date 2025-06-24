@@ -1,6 +1,7 @@
 'use client';
 
 import { UserListSkeleton } from '@/components/ui/Skeleton';
+import { useAuth } from '@/lib/context/auth-context';
 import { useSupabase } from '@/lib/hooks/useSupabase';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Database } from '@/lib/types/database';
@@ -19,13 +20,17 @@ export default function NewChatPage() {
   const supabase = useSupabase();
   const router = useRouter();
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
     const loadUsers = async () => {
+      if (!currentUser) return;
+
       try {
         const { data, error } = await supabase
           .from('users')
           .select('*')
+          .neq('id', currentUser.id) // Exclude current user
           .order('username', { ascending: true });
 
         if (error) throw error;
@@ -38,9 +43,11 @@ export default function NewChatPage() {
     };
 
     loadUsers();
-  }, [supabase]);
+  }, [supabase, currentUser]);
 
   const createChat = async (otherUserId: string) => {
+    if (creatingChat) return; // Prevent multiple simultaneous requests
+
     setCreatingChat(otherUserId);
     try {
       const { data, error } = await supabase.rpc('create_or_get_direct_chat', {
@@ -48,7 +55,11 @@ export default function NewChatPage() {
       });
 
       if (error) throw error;
-      router.push(`/chat/${data}`);
+
+      if (data) {
+        // Use replace instead of push to prevent back navigation issues
+        router.replace(`/chat/${data}`);
+      }
     } catch (error) {
       console.error('Failed to create chat:', error);
       setCreatingChat(null);
@@ -90,8 +101,8 @@ export default function NewChatPage() {
             <button
               key={user.id}
               onClick={() => createChat(user.id)}
-              disabled={creatingChat === user.id}
-              className="bg-white dark:bg-slate-800 rounded-lg p-4 hover:shadow-md transition-all text-left disabled:opacity-50"
+              disabled={creatingChat !== null}
+              className="bg-white dark:bg-slate-800 rounded-lg p-4 hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-3">
                 <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
