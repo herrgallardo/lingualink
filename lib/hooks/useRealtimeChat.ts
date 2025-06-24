@@ -59,30 +59,13 @@ export function useRealtimeChat({
 
   const serviceRef = useRef<RealtimeMessagesService | null>(null);
   const soundManager = getSoundManager();
-  const notificationService = getNotificationService(supabase);
+  const notificationServiceRef = useRef(getNotificationService(supabase));
   const participantsRef = useRef<UserRow[]>([]);
-  const hasInitializedRef = useRef(false);
 
   // Update participants ref when participants change
   useEffect(() => {
     participantsRef.current = participants;
   }, [participants]);
-
-  // Initialize realtime service
-  useEffect(() => {
-    if (!user || !chatId) return;
-
-    const service = new RealtimeMessagesService(supabase);
-    serviceRef.current = service;
-
-    // Initialize notification service
-    notificationService.initialize(user.id);
-
-    return () => {
-      service.cleanup();
-      hasInitializedRef.current = false;
-    };
-  }, [user, chatId, supabase, notificationService]);
 
   // Load initial data
   const loadInitialData = useCallback(async () => {
@@ -99,8 +82,11 @@ export function useRealtimeChat({
       );
 
       if (participantError) throw participantError;
-      setParticipants(participantData || []);
-      participantsRef.current = participantData || [];
+
+      // Ensure participantData is an array
+      const participants = participantData ?? [];
+      setParticipants(participants);
+      participantsRef.current = participants;
 
       // Load messages
       const { data: messageData, error: messageError } = await supabase
@@ -112,9 +98,9 @@ export function useRealtimeChat({
 
       if (messageError) throw messageError;
 
-      const sortedMessages = (messageData || []).reverse();
+      const sortedMessages = (messageData ?? []).reverse();
       setMessages(sortedMessages);
-      setHasMore((messageData?.length || 0) === MESSAGES_PER_PAGE);
+      setHasMore((messageData?.length ?? 0) === MESSAGES_PER_PAGE);
 
       // Load reactions for these messages
       if (sortedMessages.length > 0) {
@@ -127,10 +113,8 @@ export function useRealtimeChat({
         if (reactionData) {
           const reactionsByMessage = reactionData.reduce<Record<string, ReactionRow[]>>(
             (acc, reaction) => {
-              if (!acc[reaction.message_id]) {
-                acc[reaction.message_id] = [];
-              }
-              acc[reaction.message_id]?.push(reaction);
+              const arr = acc[reaction.message_id] ?? [];
+              acc[reaction.message_id] = [...arr, reaction];
               return acc;
             },
             {},
@@ -147,10 +131,8 @@ export function useRealtimeChat({
         if (receiptData) {
           const receiptsByMessage = receiptData.reduce<Record<string, ReadReceiptRow[]>>(
             (acc, receipt) => {
-              if (!acc[receipt.message_id]) {
-                acc[receipt.message_id] = [];
-              }
-              acc[receipt.message_id]?.push(receipt);
+              const arr = acc[receipt.message_id] ?? [];
+              acc[receipt.message_id] = [...arr, receipt];
               return acc;
             },
             {},
@@ -165,15 +147,42 @@ export function useRealtimeChat({
     }
   }, [user, chatId, supabase]);
 
-  // Subscribe to realtime updates
+  // Initialize notification service once when user changes
   useEffect(() => {
-    if (!user || !chatId || !serviceRef.current || hasInitializedRef.current) return;
+    if (!user) return;
+    notificationServiceRef.current.initialize(user.id);
+  }, [user]);
 
-    hasInitializedRef.current = true;
+  // Create realtime service instance once
+  useEffect(() => {
+    if (!serviceRef.current) {
+      serviceRef.current = new RealtimeMessagesService(supabase);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (serviceRef.current) {
+        serviceRef.current.cleanup();
+        serviceRef.current = null;
+      }
+    };
+  }, [supabase]);
+
+  // Subscribe to realtime updates when chatId changes
+  useEffect(() => {
+    if (!user || !chatId || !serviceRef.current) return;
+
+    const currentService = serviceRef.current;
+    const currentUserId = user.id;
+    let isSubscribed = true;
 
     const subscribe = async () => {
-      await serviceRef.current?.subscribe(chatId, {
+      if (!isSubscribed) return;
+
+      await currentService.subscribe(chatId, {
         onNewMessage: (message) => {
+          if (!isSubscribed) return;
+
           setMessages((prev) => {
             // Check if message already exists (optimistic update)
             const exists = prev.some((m) => m.id === message.id || m.id === message.sender_id);
@@ -185,7 +194,7 @@ export function useRealtimeChat({
           });
 
           // Play sound for messages from others
-          if (playMessageSound && message.sender_id !== user.id && soundManager.isEnabled()) {
+          if (playMessageSound && message.sender_id !== currentUserId && soundManager.isEnabled()) {
             soundManager.play('message');
           }
 
@@ -193,11 +202,11 @@ export function useRealtimeChat({
           onNewMessage?.(message);
 
           // Create notification for messages from others
-          if (message.sender_id !== user.id) {
+          if (message.sender_id !== currentUserId) {
             const sender = participantsRef.current.find((p) => p.id === message.sender_id);
             if (sender) {
-              notificationService.createNotification({
-                userId: user.id,
+              notificationServiceRef.current.createNotification({
+                userId: currentUserId,
                 title: sender.username,
                 body: message.original_text,
                 type: 'message',
@@ -211,48 +220,62 @@ export function useRealtimeChat({
           }
         },
         onMessageUpdated: (message) => {
+          if (!isSubscribed) return;
           setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
         },
         onMessageDeleted: (messageId) => {
+          if (!isSubscribed) return;
           setMessages((prev) => prev.filter((m) => m.id !== messageId));
         },
         onReactionAdded: (reaction) => {
-          setReactions((prev) => ({
-            ...prev,
-            [reaction.message_id]: [...(prev[reaction.message_id] || []), reaction],
-          }));
+          if (!isSubscribed) return;
+          setReactions((prev) => {
+            const existing = prev[reaction.message_id] ?? [];
+            return {
+              ...prev,
+              [reaction.message_id]: [...existing, reaction],
+            };
+          });
         },
         onReactionRemoved: (reaction) => {
-          setReactions((prev) => ({
-            ...prev,
-            [reaction.message_id]: (prev[reaction.message_id] || []).filter(
-              (r) => r.id !== reaction.id,
-            ),
-          }));
+          if (!isSubscribed) return;
+          setReactions((prev) => {
+            const existing = prev[reaction.message_id] ?? [];
+            return {
+              ...prev,
+              [reaction.message_id]: existing.filter((r) => r.id !== reaction.id),
+            };
+          });
         },
         onReadReceipt: (receipt) => {
-          setReadReceipts((prev) => ({
-            ...prev,
-            [receipt.message_id]: [...(prev[receipt.message_id] || []), receipt],
-          }));
+          if (!isSubscribed) return;
+          setReadReceipts((prev) => {
+            const existing = prev[receipt.message_id] ?? [];
+            return {
+              ...prev,
+              [receipt.message_id]: [...existing, receipt],
+            };
+          });
         },
-        onConnectionChange: setIsConnected,
+        onConnectionChange: (connected) => {
+          if (!isSubscribed) return;
+          setIsConnected(connected);
+        },
       });
 
       // Load initial data after subscribing
-      await loadInitialData();
+      if (isSubscribed) {
+        await loadInitialData();
+      }
     };
 
     subscribe();
-  }, [
-    user,
-    chatId,
-    loadInitialData,
-    onNewMessage,
-    playMessageSound,
-    soundManager,
-    notificationService,
-  ]);
+
+    // Cleanup function for this specific subscription
+    return () => {
+      isSubscribed = false;
+    };
+  }, [user, chatId, loadInitialData, onNewMessage, playMessageSound, soundManager]);
 
   // Send message
   const sendMessage = useCallback(
@@ -264,7 +287,7 @@ export function useRealtimeChat({
         sender_id: user.id,
         original_text: text,
         original_language: 'en', // This should be detected or user-specified
-        reply_to: replyTo,
+        reply_to: replyTo ?? null,
       };
 
       const result = await serviceRef.current.sendMessage(messageData);
@@ -285,7 +308,7 @@ export function useRealtimeChat({
           edited_at: new Date().toISOString(),
         })
         .eq('id', messageId)
-        .eq('sender_id', user?.id);
+        .eq('sender_id', user?.id ?? '');
 
       if (error) throw error;
     },
@@ -301,7 +324,7 @@ export function useRealtimeChat({
           deleted_at: new Date().toISOString(),
         })
         .eq('id', messageId)
-        .eq('sender_id', user?.id);
+        .eq('sender_id', user?.id ?? '');
 
       if (error) throw error;
     },
@@ -357,10 +380,8 @@ export function useRealtimeChat({
 
       if (reactionData) {
         const newReactions = reactionData.reduce<Record<string, ReactionRow[]>>((acc, reaction) => {
-          if (!acc[reaction.message_id]) {
-            acc[reaction.message_id] = [];
-          }
-          acc[reaction.message_id]?.push(reaction);
+          const arr = acc[reaction.message_id] ?? [];
+          acc[reaction.message_id] = [...arr, reaction];
           return acc;
         }, {});
         setReactions((prev) => ({ ...newReactions, ...prev }));
@@ -373,10 +394,8 @@ export function useRealtimeChat({
 
       if (receiptData) {
         const newReceipts = receiptData.reduce<Record<string, ReadReceiptRow[]>>((acc, receipt) => {
-          if (!acc[receipt.message_id]) {
-            acc[receipt.message_id] = [];
-          }
-          acc[receipt.message_id]?.push(receipt);
+          const arr = acc[receipt.message_id] ?? [];
+          acc[receipt.message_id] = [...arr, receipt];
           return acc;
         }, {});
         setReadReceipts((prev) => ({ ...newReceipts, ...prev }));
@@ -390,7 +409,6 @@ export function useRealtimeChat({
   const refresh = useCallback(async () => {
     setPage(0);
     setHasMore(true);
-    hasInitializedRef.current = false;
     await loadInitialData();
   }, [loadInitialData]);
 

@@ -19,7 +19,8 @@ import { useCallback, useState } from 'react';
 
 export default function ChatConversationPage() {
   const params = useParams();
-  const chatId = params.id as string;
+  const rawChatId = params.id;
+  const chatId = typeof rawChatId === 'string' ? rawChatId : (rawChatId?.[0] ?? '');
   const { user } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();

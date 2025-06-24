@@ -30,7 +30,7 @@ export interface RealtimeMessageHandlers {
 
 export class RealtimeMessagesService {
   private supabase: SupabaseClient<Database>;
-  private channel: RealtimeChannel | null = null;
+  private channels: Map<string, RealtimeChannel> = new Map();
   private handlers: RealtimeMessageHandlers = {};
   private messageQueue: Map<string, MessageQueueItem> = new Map();
   private isConnected = false;
@@ -39,8 +39,9 @@ export class RealtimeMessagesService {
   private maxReconnectAttempts = 10;
   private reconnectDelay = 1000; // Start with 1 second
   private maxReconnectDelay = 30000; // Max 30 seconds
-  private chatId: string | null = null;
+  private currentChatId: string | null = null;
   private isSubscribing = false;
+  private isUnsubscribing = false;
 
   constructor(supabase: SupabaseClient<Database>) {
     this.supabase = supabase;
@@ -59,21 +60,38 @@ export class RealtimeMessagesService {
    * Subscribe to real-time updates for a chat
    */
   async subscribe(chatId: string, handlers: RealtimeMessageHandlers): Promise<void> {
+    // Wait if currently unsubscribing
+    while (this.isUnsubscribing) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     // Prevent multiple simultaneous subscriptions
-    if (this.isSubscribing && this.chatId === chatId) {
+    if (this.isSubscribing && this.currentChatId === chatId) {
       return;
     }
 
     this.isSubscribing = true;
-    this.chatId = chatId;
     this.handlers = handlers;
 
-    // Unsubscribe from previous channel if exists
-    await this.unsubscribe();
-
     try {
+      // Unsubscribe from previous channel if it's different
+      if (this.currentChatId && this.currentChatId !== chatId) {
+        await this.unsubscribe();
+      }
+
+      this.currentChatId = chatId;
+
+      // Check if we already have a channel for this chat
+      let channel = this.channels.get(chatId);
+
+      if (channel) {
+        // Remove existing channel first
+        await this.supabase.removeChannel(channel);
+        this.channels.delete(chatId);
+      }
+
       // Create new channel
-      this.channel = this.supabase.channel(`chat:${chatId}`, {
+      channel = this.supabase.channel(`chat:${chatId}`, {
         config: {
           broadcast: {
             self: true,
@@ -82,8 +100,11 @@ export class RealtimeMessagesService {
         },
       });
 
+      // Store channel reference
+      this.channels.set(chatId, channel);
+
       // Subscribe to message changes
-      this.channel
+      channel
         .on(
           'postgres_changes',
           {
@@ -129,7 +150,7 @@ export class RealtimeMessagesService {
         );
 
       // Subscribe to reactions
-      this.channel
+      channel
         .on(
           'postgres_changes',
           {
@@ -174,7 +195,7 @@ export class RealtimeMessagesService {
         );
 
       // Subscribe to read receipts
-      this.channel.on(
+      channel.on(
         'postgres_changes',
         {
           event: 'INSERT',
@@ -198,23 +219,18 @@ export class RealtimeMessagesService {
 
       // Handle connection state
       await new Promise<void>((resolve, reject) => {
-        if (!this.channel) {
-          reject(new Error('Channel not initialized'));
-          return;
-        }
-
         const subscribeTimeout = setTimeout(() => {
           reject(new Error('Subscribe timeout'));
         }, 10000);
 
-        this.channel.subscribe((status) => {
+        channel.subscribe((status) => {
           clearTimeout(subscribeTimeout);
           if (status === 'SUBSCRIBED') {
             this.handleConnected();
             resolve();
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             this.handleDisconnected();
-            resolve();
+            resolve(); // Still resolve to prevent hanging
           }
         });
       });
@@ -230,19 +246,29 @@ export class RealtimeMessagesService {
    * Unsubscribe from real-time updates
    */
   async unsubscribe(): Promise<void> {
-    if (this.channel) {
-      await this.supabase.removeChannel(this.channel);
-      this.channel = null;
-    }
+    if (this.isUnsubscribing) return;
 
-    // Clear reconnect timer
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.isUnsubscribing = true;
 
-    this.isConnected = false;
-    this.reconnectAttempts = 0;
+    try {
+      // Remove all channels
+      for (const [_chatId, channel] of this.channels) {
+        await this.supabase.removeChannel(channel);
+      }
+      this.channels.clear();
+
+      // Clear reconnect timer
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
+      this.isConnected = false;
+      this.reconnectAttempts = 0;
+      this.currentChatId = null;
+    } finally {
+      this.isUnsubscribing = false;
+    }
   }
 
   /**
@@ -258,9 +284,9 @@ export class RealtimeMessagesService {
       id: tempId,
       ...message,
       created_at: new Date().toISOString(),
-      timestamp: message.timestamp || new Date().toISOString(),
-      original_language: message.original_language || 'en',
-      translations: message.translations || {},
+      timestamp: message.timestamp ?? new Date().toISOString(),
+      original_language: message.original_language ?? 'en',
+      translations: message.translations ?? {},
       edited_at: null,
       deleted_at: null,
     };
@@ -413,8 +439,8 @@ export class RealtimeMessagesService {
       this.reconnectTimer = null;
       this.reconnectAttempts++;
 
-      if (this.chatId && navigator.onLine && !this.isSubscribing) {
-        this.subscribe(this.chatId, this.handlers);
+      if (this.currentChatId && navigator.onLine && !this.isSubscribing) {
+        this.subscribe(this.currentChatId, this.handlers);
       }
 
       // Exponential backoff
@@ -426,8 +452,8 @@ export class RealtimeMessagesService {
    * Handle online event
    */
   private handleOnline = (): void => {
-    if (this.chatId && !this.isConnected && !this.isSubscribing) {
-      this.subscribe(this.chatId, this.handlers);
+    if (this.currentChatId && !this.isConnected && !this.isSubscribing) {
+      this.subscribe(this.currentChatId, this.handlers);
     }
   };
 
