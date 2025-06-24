@@ -223,7 +223,7 @@ export interface TranslationContext {
 /**
  * Type guard for translation keys
  */
-export function isTranslationKey(key: string): key is KnownTranslationKey {
+export function isTranslationKey(_key: string): _key is KnownTranslationKey {
   return true;
 }
 
