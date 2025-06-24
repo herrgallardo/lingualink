@@ -33,7 +33,7 @@ export function MessageInput({
   onCancelReply,
   disabled = false,
 }: MessageInputProps) {
-  const { user } = useAuth();
+  const { user: _user } = useAuth(); // Prefixed with underscore to indicate intentionally unused
   const { preferences } = usePreferencesContext();
   const { t } = useTranslation();
   const [message, setMessage] = useState('');

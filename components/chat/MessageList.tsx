@@ -33,7 +33,7 @@ interface MessageListProps {
 }
 
 export function MessageList({
-  chatId,
+  chatId: _chatId, // Prefixed with underscore to indicate intentionally unused
   messages,
   participants,
   reactions,
@@ -126,7 +126,7 @@ export function MessageList({
     // Check if message should be grouped with previous
     let isGrouped = false;
     if (preferences.messageGrouping && prevMessage && !showDateSeparator) {
-      const timeDiff = messageDate.getTime() - prevDate!.getTime();
+      const timeDiff = messageDate.getTime() - prevDate.getTime();
       isGrouped = prevMessage.sender_id === message.sender_id && timeDiff < 60000; // 1 minute
     }
 
@@ -140,10 +140,10 @@ export function MessageList({
     return map;
   }, {});
 
-  // Get typing users names
+  // Get typing users names - filter out undefined values properly
   const typingUserNames = typingUsers
     .map((userId) => participantMap[userId]?.username)
-    .filter(Boolean);
+    .filter((username): username is string => Boolean(username));
 
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -178,6 +178,9 @@ export function MessageList({
           const messageReadReceipts = readReceipts[message.id] || [];
           const readBy = messageReadReceipts.map((r) => r.user_id);
 
+          // Get previous message safely
+          const previousMessage = index > 0 ? messages[index - 1] : null;
+
           return (
             <Message
               key={message.id}
@@ -185,11 +188,11 @@ export function MessageList({
               sender={sender}
               showDateSeparator={showDateSeparator}
               isGrouped={isGrouped}
-              previousMessage={index > 0 ? messages[index - 1] : null}
-              onEdit={onEditMessage}
-              onDelete={onDeleteMessage}
-              onReply={onReplyMessage}
-              onReaction={onReaction}
+              {...(previousMessage && { previousMessage })}
+              {...(onEditMessage && { onEdit: onEditMessage })}
+              {...(onDeleteMessage && { onDelete: onDeleteMessage })}
+              {...(onReplyMessage && { onReply: onReplyMessage })}
+              {...(onReaction && { onReaction })}
               reactions={messageReactions}
               readBy={readBy}
               chatParticipants={participants}

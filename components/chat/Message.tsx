@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/context/auth-context';
 import { usePreferencesContext } from '@/lib/context/preferences-context';
+import { useProfile } from '@/lib/hooks/useSupabase';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Database } from '@/lib/types/database';
 import { formatTime, getDateLabel } from '@/lib/utils/date';
@@ -56,6 +57,7 @@ export function Message({
   chatParticipants = [],
 }: MessageProps) {
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { preferences } = usePreferencesContext();
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
@@ -69,12 +71,12 @@ export function Message({
   useEffect(() => {
     if (preferences.autoTranslate && message.translations) {
       const translations = message.translations as Record<string, string>;
-      const userLang = user?.preferred_language || 'en';
+      const userLang = profile?.preferred_language || 'en';
       if (translations[userLang] && translations[userLang] !== message.original_text) {
         setTranslatedText(translations[userLang]);
       }
     }
-  }, [message, preferences.autoTranslate, user?.preferred_language]);
+  }, [message, preferences.autoTranslate, profile?.preferred_language]);
 
   const handleMenuAction = useCallback(
     (action: 'edit' | 'delete' | 'reply') => {
