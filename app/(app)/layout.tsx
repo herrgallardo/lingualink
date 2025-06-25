@@ -1,5 +1,6 @@
 'use client';
 
+import { RealtimeDebugPanel } from '@/components/debug/RealtimeDebugPanel';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
@@ -152,6 +153,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
         onClose={() => setNotificationCenterOpen(false)}
         userId={user.id}
       />
+
+      {/* Debug Panel - only in development */}
+      {process.env.NODE_ENV === 'development' && <RealtimeDebugPanel />}
     </div>
   );
 }

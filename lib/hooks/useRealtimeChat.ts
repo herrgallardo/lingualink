@@ -57,10 +57,14 @@ export function useRealtimeChat({
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
 
+  // Use refs to track state and prevent multiple operations
   const serviceRef = useRef<RealtimeMessagesService | null>(null);
-  const soundManager = getSoundManager();
+  const soundManager = useRef(getSoundManager());
   const notificationServiceRef = useRef(getNotificationService(supabase));
   const participantsRef = useRef<UserRow[]>([]);
+  const isSubscribingRef = useRef(false);
+  const isCleaningUpRef = useRef(false);
+  const previousChatIdRef = useRef<string | null>(null);
 
   // Update participants ref when participants change
   useEffect(() => {
@@ -161,9 +165,11 @@ export function useRealtimeChat({
 
     // Cleanup on unmount
     return () => {
-      if (serviceRef.current) {
-        serviceRef.current.cleanup();
+      if (serviceRef.current && !isCleaningUpRef.current) {
+        isCleaningUpRef.current = true;
+        const service = serviceRef.current;
         serviceRef.current = null;
+        service.cleanup().catch(console.error);
       }
     };
   }, [supabase]);
@@ -172,100 +178,119 @@ export function useRealtimeChat({
   useEffect(() => {
     if (!user || !chatId || !serviceRef.current) return;
 
+    // Check if we're already subscribing or if it's the same chat
+    if (isSubscribingRef.current || previousChatIdRef.current === chatId) {
+      return;
+    }
+
+    isSubscribingRef.current = true;
+    previousChatIdRef.current = chatId;
+
     const currentService = serviceRef.current;
     const currentUserId = user.id;
-    let isSubscribed = true;
+    let mounted = true;
 
     const subscribe = async () => {
-      if (!isSubscribed) return;
+      try {
+        await currentService.subscribe(chatId, {
+          onNewMessage: (message) => {
+            if (!mounted) return;
 
-      await currentService.subscribe(chatId, {
-        onNewMessage: (message) => {
-          if (!isSubscribed) return;
+            setMessages((prev) => {
+              // Check if message already exists (optimistic update)
+              const exists = prev.some((m) => m.id === message.id || m.id === message.sender_id);
+              if (exists) {
+                // Replace temp message with real one
+                return prev.map((m) => (m.id === message.sender_id ? message : m));
+              }
+              return [...prev, message];
+            });
 
-          setMessages((prev) => {
-            // Check if message already exists (optimistic update)
-            const exists = prev.some((m) => m.id === message.id || m.id === message.sender_id);
-            if (exists) {
-              // Replace temp message with real one
-              return prev.map((m) => (m.id === message.sender_id ? message : m));
+            // Play sound for messages from others
+            if (
+              playMessageSound &&
+              message.sender_id !== currentUserId &&
+              soundManager.current.isEnabled()
+            ) {
+              soundManager.current.play('message');
             }
-            return [...prev, message];
-          });
 
-          // Play sound for messages from others
-          if (playMessageSound && message.sender_id !== currentUserId && soundManager.isEnabled()) {
-            soundManager.play('message');
-          }
+            // Call custom handler
+            onNewMessage?.(message);
 
-          // Call custom handler
-          onNewMessage?.(message);
-
-          // Create notification for messages from others
-          if (message.sender_id !== currentUserId) {
-            const sender = participantsRef.current.find((p) => p.id === message.sender_id);
-            if (sender) {
-              notificationServiceRef.current.createNotification({
-                userId: currentUserId,
-                title: sender.username,
-                body: message.original_text,
-                type: 'message',
-                data: {
-                  chatId,
-                  messageId: message.id,
-                  senderId: sender.id,
-                },
-              });
+            // Create notification for messages from others
+            if (message.sender_id !== currentUserId) {
+              const sender = participantsRef.current.find((p) => p.id === message.sender_id);
+              if (sender) {
+                notificationServiceRef.current.createNotification({
+                  userId: currentUserId,
+                  title: sender.username,
+                  body: message.original_text,
+                  type: 'message',
+                  data: {
+                    chatId,
+                    messageId: message.id,
+                    senderId: sender.id,
+                  },
+                });
+              }
             }
-          }
-        },
-        onMessageUpdated: (message) => {
-          if (!isSubscribed) return;
-          setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
-        },
-        onMessageDeleted: (messageId) => {
-          if (!isSubscribed) return;
-          setMessages((prev) => prev.filter((m) => m.id !== messageId));
-        },
-        onReactionAdded: (reaction) => {
-          if (!isSubscribed) return;
-          setReactions((prev) => {
-            const existing = prev[reaction.message_id] ?? [];
-            return {
-              ...prev,
-              [reaction.message_id]: [...existing, reaction],
-            };
-          });
-        },
-        onReactionRemoved: (reaction) => {
-          if (!isSubscribed) return;
-          setReactions((prev) => {
-            const existing = prev[reaction.message_id] ?? [];
-            return {
-              ...prev,
-              [reaction.message_id]: existing.filter((r) => r.id !== reaction.id),
-            };
-          });
-        },
-        onReadReceipt: (receipt) => {
-          if (!isSubscribed) return;
-          setReadReceipts((prev) => {
-            const existing = prev[receipt.message_id] ?? [];
-            return {
-              ...prev,
-              [receipt.message_id]: [...existing, receipt],
-            };
-          });
-        },
-        onConnectionChange: (connected) => {
-          if (!isSubscribed) return;
-          setIsConnected(connected);
-        },
-      });
+          },
+          onMessageUpdated: (message) => {
+            if (!mounted) return;
+            setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
+          },
+          onMessageDeleted: (messageId) => {
+            if (!mounted) return;
+            setMessages((prev) => prev.filter((m) => m.id !== messageId));
+          },
+          onReactionAdded: (reaction) => {
+            if (!mounted) return;
+            setReactions((prev) => {
+              const existing = prev[reaction.message_id] ?? [];
+              return {
+                ...prev,
+                [reaction.message_id]: [...existing, reaction],
+              };
+            });
+          },
+          onReactionRemoved: (reaction) => {
+            if (!mounted) return;
+            setReactions((prev) => {
+              const existing = prev[reaction.message_id] ?? [];
+              return {
+                ...prev,
+                [reaction.message_id]: existing.filter((r) => r.id !== reaction.id),
+              };
+            });
+          },
+          onReadReceipt: (receipt) => {
+            if (!mounted) return;
+            setReadReceipts((prev) => {
+              const existing = prev[receipt.message_id] ?? [];
+              return {
+                ...prev,
+                [receipt.message_id]: [...existing, receipt],
+              };
+            });
+          },
+          onConnectionChange: (connected) => {
+            if (!mounted) return;
+            setIsConnected(connected);
+          },
+        });
 
-      // Load initial data after subscribing
-      if (isSubscribed) {
-        await loadInitialData();
+        // Load initial data after subscribing
+        if (mounted) {
+          await loadInitialData();
+        }
+      } catch (err) {
+        console.error('Failed to subscribe to chat:', err);
+        if (mounted) {
+          setError(err instanceof Error ? err : new Error('Failed to connect to chat'));
+        }
+      } finally {
+        isSubscribingRef.current = false;
       }
     };
 
@@ -273,9 +298,9 @@ export function useRealtimeChat({
 
     // Cleanup function for this specific subscription
     return () => {
-      isSubscribed = false;
+      mounted = false;
     };
-  }, [user, chatId, loadInitialData, onNewMessage, playMessageSound, soundManager]);
+  }, [user, chatId, loadInitialData, onNewMessage, playMessageSound]);
 
   // Send message
   const sendMessage = useCallback(

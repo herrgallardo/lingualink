@@ -28,9 +28,15 @@ export interface RealtimeMessageHandlers {
   onConnectionChange?: (connected: boolean) => void;
 }
 
+interface ChannelState {
+  channel: RealtimeChannel;
+  status: 'unsubscribed' | 'subscribing' | 'subscribed' | 'unsubscribing' | 'error';
+  subscriptionPromise?: Promise<void>;
+}
+
 export class RealtimeMessagesService {
   private supabase: SupabaseClient<Database>;
-  private channels: Map<string, RealtimeChannel> = new Map();
+  private channelStates: Map<string, ChannelState> = new Map();
   private handlers: RealtimeMessageHandlers = {};
   private messageQueue: Map<string, MessageQueueItem> = new Map();
   private isConnected = false;
@@ -40,8 +46,7 @@ export class RealtimeMessagesService {
   private reconnectDelay = 1000; // Start with 1 second
   private maxReconnectDelay = 30000; // Max 30 seconds
   private currentChatId: string | null = null;
-  private isSubscribing = false;
-  private isUnsubscribing = false;
+  private cleanupFunctions: Map<string, () => void> = new Map();
 
   constructor(supabase: SupabaseClient<Database>) {
     this.supabase = supabase;
@@ -60,185 +65,279 @@ export class RealtimeMessagesService {
    * Subscribe to real-time updates for a chat
    */
   async subscribe(chatId: string, handlers: RealtimeMessageHandlers): Promise<void> {
-    // Wait if currently unsubscribing
-    while (this.isUnsubscribing) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    // Prevent multiple simultaneous subscriptions
-    if (this.isSubscribing && this.currentChatId === chatId) {
-      return;
-    }
-
-    this.isSubscribing = true;
     this.handlers = handlers;
+    this.currentChatId = chatId;
+
+    // Check if we already have an active subscription for this chat
+    const existingState = this.channelStates.get(chatId);
+
+    if (existingState) {
+      // If already subscribed, just return
+      if (existingState.status === 'subscribed') {
+        console.log(`Already subscribed to chat ${chatId}`);
+        return;
+      }
+
+      // If currently subscribing, wait for it to complete
+      if (existingState.status === 'subscribing' && existingState.subscriptionPromise) {
+        console.log(`Already subscribing to chat ${chatId}, waiting...`);
+        return existingState.subscriptionPromise;
+      }
+
+      // If in error or unsubscribing state, remove and recreate
+      if (existingState.status === 'error' || existingState.status === 'unsubscribing') {
+        console.log(`Channel in ${existingState.status} state, cleaning up...`);
+        await this.cleanupChannel(chatId);
+      }
+    }
+
+    // Create new subscription
+    const subscriptionPromise = this.createSubscription(chatId);
+
+    // Store the promise so other calls can wait for it
+    const channelState = this.channelStates.get(chatId);
+    if (channelState) {
+      channelState.subscriptionPromise = subscriptionPromise;
+    }
 
     try {
-      // Unsubscribe from previous channel if it's different
-      if (this.currentChatId && this.currentChatId !== chatId) {
-        await this.unsubscribe();
-      }
+      await subscriptionPromise;
+    } catch (error) {
+      console.error(`Failed to subscribe to chat ${chatId}:`, error);
+      // Clean up on error
+      await this.cleanupChannel(chatId);
+      throw error;
+    }
+  }
 
-      this.currentChatId = chatId;
-
-      // Check if we already have a channel for this chat
-      let channel = this.channels.get(chatId);
-
-      if (channel) {
-        // Remove existing channel first
-        await this.supabase.removeChannel(channel);
-        this.channels.delete(chatId);
-      }
-
-      // Create new channel
-      channel = this.supabase.channel(`chat:${chatId}`, {
-        config: {
-          broadcast: {
-            self: true,
-            ack: true,
-          },
+  /**
+   * Create a new subscription for a chat
+   */
+  private async createSubscription(chatId: string): Promise<void> {
+    // Create channel
+    const channel = this.supabase.channel(`chat:${chatId}`, {
+      config: {
+        broadcast: {
+          self: true,
+          ack: true,
         },
+      },
+    });
+
+    // Store channel state
+    this.channelStates.set(chatId, {
+      channel,
+      status: 'subscribing',
+    });
+
+    // Set up event listeners before subscribing
+    this.setupChannelListeners(channel, chatId);
+
+    // Subscribe to channel
+    return new Promise<void>((resolve, reject) => {
+      let subscribeTimeout: NodeJS.Timeout | undefined;
+      let resolved = false;
+
+      // Cleanup function
+      const cleanup = () => {
+        if (subscribeTimeout) {
+          clearTimeout(subscribeTimeout);
+          subscribeTimeout = undefined;
+        }
+      };
+
+      // Store cleanup function
+      this.cleanupFunctions.set(chatId, cleanup);
+
+      // Set timeout for subscription
+      subscribeTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          const state = this.channelStates.get(chatId);
+          if (state) {
+            state.status = 'error';
+          }
+          cleanup();
+          reject(new Error('Subscribe timeout'));
+        }
+      }, 10000);
+
+      // Subscribe with status callback
+      channel.subscribe((status) => {
+        console.log(`Channel ${chatId} status: ${status}`);
+
+        const state = this.channelStates.get(chatId);
+        if (!state) return;
+
+        if (status === 'SUBSCRIBED') {
+          state.status = 'subscribed';
+          if (!resolved) {
+            resolved = true;
+            this.handleConnected();
+            cleanup();
+            resolve();
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          state.status = 'error';
+          if (!resolved) {
+            resolved = true;
+            this.handleDisconnected();
+            cleanup();
+            reject(new Error(`Channel subscription failed: ${status}`));
+          }
+        } else if (status === 'CLOSED') {
+          state.status = 'unsubscribed';
+          this.handleDisconnected();
+        }
       });
+    });
+  }
 
-      // Store channel reference
-      this.channels.set(chatId, channel);
-
-      // Subscribe to message changes
-      channel
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages',
-            filter: `chat_id=eq.${chatId}`,
-          },
-          (payload) => {
-            if (payload.new && this.handlers.onNewMessage) {
-              this.handlers.onNewMessage(payload.new as MessageRow);
-            }
-          },
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
-            filter: `chat_id=eq.${chatId}`,
-          },
-          (payload) => {
-            if (payload.new && this.handlers.onMessageUpdated) {
-              this.handlers.onMessageUpdated(payload.new as MessageRow);
-            }
-          },
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'messages',
-            filter: `chat_id=eq.${chatId}`,
-          },
-          (payload) => {
-            if (payload.old && this.handlers.onMessageDeleted) {
-              const oldMessage = payload.old as { id: string };
-              this.handlers.onMessageDeleted(oldMessage.id);
-            }
-          },
-        );
-
-      // Subscribe to reactions
-      channel
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'message_reactions',
-          },
-          async (payload) => {
-            const reaction = payload.new as ReactionRow;
-            // Check if reaction is for a message in this chat
-            const { data: message } = await this.supabase
-              .from('messages')
-              .select('chat_id')
-              .eq('id', reaction.message_id)
-              .single();
-
-            if (message?.chat_id === chatId && this.handlers.onReactionAdded) {
-              this.handlers.onReactionAdded(reaction);
-            }
-          },
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'message_reactions',
-          },
-          async (payload) => {
-            const reaction = payload.old as ReactionRow;
-            // Check if reaction is for a message in this chat
-            const { data: message } = await this.supabase
-              .from('messages')
-              .select('chat_id')
-              .eq('id', reaction.message_id)
-              .single();
-
-            if (message?.chat_id === chatId && this.handlers.onReactionRemoved) {
-              this.handlers.onReactionRemoved(reaction);
-            }
-          },
-        );
-
-      // Subscribe to read receipts
-      channel.on(
+  /**
+   * Set up channel event listeners
+   */
+  private setupChannelListeners(channel: RealtimeChannel, chatId: string): void {
+    // Subscribe to message changes
+    channel
+      .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'read_receipts',
+          table: 'messages',
+          filter: `chat_id=eq.${chatId}`,
         },
-        async (payload) => {
-          const receipt = payload.new as ReadReceiptRow;
-          // Check if receipt is for a message in this chat
-          const { data: message } = await this.supabase
-            .from('messages')
-            .select('chat_id')
-            .eq('id', receipt.message_id)
-            .single();
-
-          if (message?.chat_id === chatId && this.handlers.onReadReceipt) {
-            this.handlers.onReadReceipt(receipt);
+        (payload) => {
+          if (payload.new && this.handlers.onNewMessage) {
+            this.handlers.onNewMessage(payload.new as MessageRow);
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          if (payload.new && this.handlers.onMessageUpdated) {
+            this.handlers.onMessageUpdated(payload.new as MessageRow);
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          if (payload.old && this.handlers.onMessageDeleted) {
+            const oldMessage = payload.old as { id: string };
+            this.handlers.onMessageDeleted(oldMessage.id);
           }
         },
       );
 
-      // Handle connection state
-      await new Promise<void>((resolve, reject) => {
-        const subscribeTimeout = setTimeout(() => {
-          reject(new Error('Subscribe timeout'));
-        }, 10000);
+    // Subscribe to reactions
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        async (payload) => {
+          const reaction = payload.new as ReactionRow;
+          // Check if reaction is for a message in this chat
+          const { data: message } = await this.supabase
+            .from('messages')
+            .select('chat_id')
+            .eq('id', reaction.message_id)
+            .single();
 
-        channel.subscribe((status) => {
-          clearTimeout(subscribeTimeout);
-          if (status === 'SUBSCRIBED') {
-            this.handleConnected();
-            resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            this.handleDisconnected();
-            resolve(); // Still resolve to prevent hanging
+          if (message?.chat_id === chatId && this.handlers.onReactionAdded) {
+            this.handlers.onReactionAdded(reaction);
           }
-        });
-      });
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        async (payload) => {
+          const reaction = payload.old as ReactionRow;
+          // Check if reaction is for a message in this chat
+          const { data: message } = await this.supabase
+            .from('messages')
+            .select('chat_id')
+            .eq('id', reaction.message_id)
+            .single();
+
+          if (message?.chat_id === chatId && this.handlers.onReactionRemoved) {
+            this.handlers.onReactionRemoved(reaction);
+          }
+        },
+      );
+
+    // Subscribe to read receipts
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'read_receipts',
+      },
+      async (payload) => {
+        const receipt = payload.new as ReadReceiptRow;
+        // Check if receipt is for a message in this chat
+        const { data: message } = await this.supabase
+          .from('messages')
+          .select('chat_id')
+          .eq('id', receipt.message_id)
+          .single();
+
+        if (message?.chat_id === chatId && this.handlers.onReadReceipt) {
+          this.handlers.onReadReceipt(receipt);
+        }
+      },
+    );
+  }
+
+  /**
+   * Clean up a channel
+   */
+  private async cleanupChannel(chatId: string): Promise<void> {
+    const state = this.channelStates.get(chatId);
+    if (!state) return;
+
+    // Update status
+    state.status = 'unsubscribing';
+
+    // Run cleanup function if exists
+    const cleanup = this.cleanupFunctions.get(chatId);
+    if (cleanup) {
+      cleanup();
+      this.cleanupFunctions.delete(chatId);
+    }
+
+    try {
+      // Unsubscribe and remove channel
+      await state.channel.unsubscribe();
+      await this.supabase.removeChannel(state.channel);
     } catch (error) {
-      console.error('Error subscribing to channel:', error);
-      this.handleDisconnected();
+      console.error(`Error cleaning up channel ${chatId}:`, error);
     } finally {
-      this.isSubscribing = false;
+      // Remove from maps
+      this.channelStates.delete(chatId);
     }
   }
 
@@ -246,29 +345,23 @@ export class RealtimeMessagesService {
    * Unsubscribe from real-time updates
    */
   async unsubscribe(): Promise<void> {
-    if (this.isUnsubscribing) return;
-
-    this.isUnsubscribing = true;
-
-    try {
-      // Remove all channels
-      for (const [_chatId, channel] of this.channels) {
-        await this.supabase.removeChannel(channel);
-      }
-      this.channels.clear();
-
-      // Clear reconnect timer
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = null;
-      }
-
-      this.isConnected = false;
-      this.reconnectAttempts = 0;
-      this.currentChatId = null;
-    } finally {
-      this.isUnsubscribing = false;
+    // Clear reconnect timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
+
+    // Clean up all channels
+    const cleanupPromises = Array.from(this.channelStates.keys()).map((chatId) =>
+      this.cleanupChannel(chatId),
+    );
+
+    await Promise.all(cleanupPromises);
+
+    // Reset state
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
+    this.currentChatId = null;
   }
 
   /**
@@ -439,8 +532,12 @@ export class RealtimeMessagesService {
       this.reconnectTimer = null;
       this.reconnectAttempts++;
 
-      if (this.currentChatId && navigator.onLine && !this.isSubscribing) {
-        this.subscribe(this.currentChatId, this.handlers);
+      if (this.currentChatId && navigator.onLine) {
+        // Only reconnect if we have an active chat
+        const state = this.channelStates.get(this.currentChatId);
+        if (!state || state.status !== 'subscribed') {
+          this.subscribe(this.currentChatId, this.handlers);
+        }
       }
 
       // Exponential backoff
@@ -452,8 +549,11 @@ export class RealtimeMessagesService {
    * Handle online event
    */
   private handleOnline = (): void => {
-    if (this.currentChatId && !this.isConnected && !this.isSubscribing) {
-      this.subscribe(this.currentChatId, this.handlers);
+    if (this.currentChatId) {
+      const state = this.channelStates.get(this.currentChatId);
+      if (!state || state.status !== 'subscribed') {
+        this.subscribe(this.currentChatId, this.handlers);
+      }
     }
   };
 
@@ -463,6 +563,7 @@ export class RealtimeMessagesService {
   private handleOffline = (): void => {
     // Connection will be lost automatically
     // Just ensure we handle it gracefully
+    this.isConnected = false;
   };
 
   /**
