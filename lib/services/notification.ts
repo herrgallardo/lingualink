@@ -40,6 +40,8 @@ export class NotificationService {
   private supabase: SupabaseClient<Database>;
   private userId: string | null = null;
   private channel: ReturnType<typeof this.supabase.channel> | null = null;
+  private isInitialized = false;
+  private initializePromise: Promise<void> | null = null;
 
   constructor(supabase: SupabaseClient<Database>) {
     this.supabase = supabase;
@@ -49,9 +51,59 @@ export class NotificationService {
    * Initialize notification service for a user
    */
   async initialize(userId: string): Promise<void> {
+    // If already initialized for this user, return early
+    if (this.isInitialized && this.userId === userId) {
+      return;
+    }
+
+    // If currently initializing, wait for it to complete
+    if (this.initializePromise) {
+      await this.initializePromise;
+      // Check again if we're initialized for the right user
+      if (this.isInitialized && this.userId === userId) {
+        return;
+      }
+    }
+
+    // If initialized for a different user, cleanup first
+    if (this.isInitialized && this.userId !== userId) {
+      await this.cleanup();
+    }
+
+    // Start initialization
+    this.initializePromise = this.doInitialize(userId);
+
+    try {
+      await this.initializePromise;
+    } finally {
+      this.initializePromise = null;
+    }
+  }
+
+  /**
+   * Perform the actual initialization
+   */
+  private async doInitialize(userId: string): Promise<void> {
     this.userId = userId;
-    await this.setupRealtimeSubscription();
-    await this.requestNotificationPermission();
+
+    try {
+      // Setup realtime - this won't throw even if it fails
+      await this.setupRealtimeSubscription();
+
+      // Request notification permission - this is optional
+      try {
+        await this.requestNotificationPermission();
+      } catch (error) {
+        console.warn('Failed to setup browser notifications:', error);
+        // Continue anyway - in-app notifications will still work
+      }
+
+      this.isInitialized = true;
+    } catch (error) {
+      console.error('Failed to initialize notification service:', error);
+      // Still mark as initialized so we don't keep retrying
+      this.isInitialized = true;
+    }
   }
 
   /**
@@ -60,9 +112,40 @@ export class NotificationService {
   private async setupRealtimeSubscription(): Promise<void> {
     if (!this.userId) return;
 
-    this.channel = this.supabase
-      .channel(`notifications:${this.userId}`)
-      .on(
+    // Clean up any existing channel
+    if (this.channel) {
+      try {
+        await this.supabase.removeChannel(this.channel);
+      } catch (error) {
+        console.error('Error removing old notification channel:', error);
+      }
+      this.channel = null;
+    }
+
+    try {
+      // First, check if notifications table exists and we have access
+      const { error: testError } = await this.supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', this.userId)
+        .limit(1);
+
+      if (testError) {
+        console.warn('Cannot access notifications table:', testError.message);
+        console.warn('Notifications will work without realtime updates.');
+        console.warn('To enable realtime notifications:');
+        console.warn('1. Ensure the notifications table exists');
+        console.warn('2. Enable realtime for the notifications table in Supabase dashboard');
+        console.warn('3. Check RLS policies allow SELECT for authenticated users');
+        return;
+      }
+
+      // Create new channel
+      const channelName = `notifications:${this.userId}`;
+      this.channel = this.supabase.channel(channelName);
+
+      // Set up event listener
+      this.channel.on(
         'postgres_changes',
         {
           event: 'INSERT',
@@ -73,8 +156,39 @@ export class NotificationService {
         (payload) => {
           this.handleNewNotification(payload.new as NotificationData);
         },
-      )
-      .subscribe();
+      );
+
+      // Subscribe to the channel with error handling
+      await new Promise<void>((resolve) => {
+        if (!this.channel) {
+          resolve(); // Just continue without realtime
+          return;
+        }
+
+        const timeout = setTimeout(() => {
+          console.warn('Notification realtime subscription timeout - continuing without realtime');
+          resolve(); // Don't reject, just continue without realtime
+        }, 5000); // Reduced timeout
+
+        this.channel.subscribe((status) => {
+          console.log(`Notification channel status: ${status}`);
+
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(timeout);
+            console.log('Notification realtime subscription successful');
+            resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            clearTimeout(timeout);
+            console.warn(`Notification realtime subscription failed: ${status}`);
+            resolve(); // Don't reject, just continue without realtime
+          }
+        });
+      });
+    } catch (error) {
+      console.warn('Failed to setup realtime notifications:', error);
+      console.warn('Notifications will work without realtime updates.');
+      // Don't throw - notifications can still work without realtime
+    }
   }
 
   /**
@@ -349,6 +463,12 @@ export class NotificationService {
       });
 
       if (error) throw error;
+
+      // Emit event for NotificationBell to update count
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lingualink:notification-read'));
+      }
+
       return data;
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
@@ -379,6 +499,12 @@ export class NotificationService {
       const { data, error } = await this.supabase.rpc('mark_all_notifications_read');
 
       if (error) throw error;
+
+      // Emit event for NotificationBell to update count
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lingualink:all-notifications-read'));
+      }
+
       return data;
     } catch (error) {
       console.error('Failed to mark all as read:', error);
@@ -408,11 +534,17 @@ export class NotificationService {
   /**
    * Cleanup
    */
-  cleanup(): void {
+  async cleanup(): Promise<void> {
     if (this.channel) {
-      this.supabase.removeChannel(this.channel);
+      try {
+        await this.supabase.removeChannel(this.channel);
+      } catch (error) {
+        console.error('Error cleaning up notification channel:', error);
+      }
       this.channel = null;
     }
+    this.isInitialized = false;
+    this.userId = null;
   }
 }
 
