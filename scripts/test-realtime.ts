@@ -105,60 +105,86 @@ async function testMultipleChannels(): Promise<void> {
 
 async function testReconnection(): Promise<void> {
   const channelName = `test-reconnect-${Date.now()}`;
-  const channel = supabase.channel(channelName);
-  let reconnectCount = 0;
+  let channel = supabase.channel(channelName);
 
+  // Initial connection
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Initial subscription timeout'));
     }, 5000);
 
     channel.subscribe((status) => {
-      console.log(`  Status: ${status}`);
+      console.log(`  Initial status: ${status}`);
 
       if (status === 'SUBSCRIBED') {
-        if (reconnectCount === 0) {
-          clearTimeout(timeout);
-          // Simulate disconnect by unsubscribing
-          console.log('  Simulating disconnect...');
-          channel.unsubscribe();
-          reconnectCount++;
-
-          // Resubscribe after a delay
-          setTimeout(() => {
-            console.log('  Attempting reconnection...');
-            const reconnectTimeout = setTimeout(() => {
-              reject(new Error('Reconnection timeout'));
-            }, 5000);
-
-            channel.subscribe((reconnectStatus) => {
-              console.log(`  Reconnect status: ${reconnectStatus}`);
-              if (reconnectStatus === 'SUBSCRIBED') {
-                clearTimeout(reconnectTimeout);
-                resolve();
-              }
-            });
-          }, 1000);
-        }
+        clearTimeout(timeout);
+        resolve();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         clearTimeout(timeout);
-        reject(new Error(`Subscription failed: ${status}`));
+        reject(new Error(`Initial subscription failed: ${status}`));
       }
     });
   });
 
+  // Simulate disconnect
+  console.log('  Simulating disconnect...');
+  await channel.unsubscribe();
+  await supabase.removeChannel(channel);
+
+  // Wait a moment
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Create new channel instance for reconnection
+  console.log('  Creating new channel for reconnection...');
+  channel = supabase.channel(channelName);
+
+  // Reconnect
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Reconnection timeout'));
+    }, 5000);
+
+    channel.subscribe((status) => {
+      console.log(`  Reconnect status: ${status}`);
+      if (status === 'SUBSCRIBED') {
+        clearTimeout(timeout);
+        resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        clearTimeout(timeout);
+        reject(new Error(`Reconnection failed: ${status}`));
+      }
+    });
+  });
+
+  // Final cleanup
+  await channel.unsubscribe();
   await supabase.removeChannel(channel);
 }
 
 async function testPostgresChanges(): Promise<void> {
-  // First, ensure we have a test user
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'test@example.com',
-    password: 'testpassword123',
+  // First, create a test user if it doesn't exist
+  const testEmail = 'test@example.com';
+  const testPassword = 'testpassword123';
+
+  // Try to sign up first
+  const { error: signUpError } = await supabase.auth.signUp({
+    email: testEmail,
+    password: testPassword,
   });
 
-  if (authError || !authData.user) {
+  // If signup fails with user already exists, try to sign in
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email: testEmail,
+    password: testPassword,
+  });
+
+  if (authError && !signUpError) {
     throw new Error(`Auth failed: ${authError?.message || 'No user'}`);
+  }
+
+  const user = authData?.user || (await supabase.auth.getUser()).data.user;
+  if (!user) {
+    throw new Error('No authenticated user');
   }
 
   const testChatId = `test-chat-${Date.now()}`;
@@ -203,7 +229,7 @@ async function testPostgresChanges(): Promise<void> {
   // Insert a test message
   const { error: insertError } = await supabase.from('messages').insert({
     chat_id: testChatId,
-    sender_id: authData.user.id,
+    sender_id: user.id,
     original_text: 'Test message',
     original_language: 'en',
   });

@@ -1,5 +1,5 @@
 /**
- * Real-time presence service for managing user online status
+ * Real-time presence service with improved timeout handling
  */
 import type { Database } from '@/lib/types/database';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
@@ -23,8 +23,16 @@ export class PresenceService {
   private channel: RealtimeChannel | null = null;
   private userId: string;
   private updateInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private subscriptionTimeout: NodeJS.Timeout | null = null;
   private isJoining = false;
   private isLeaving = false;
+  private retryCount = 0;
+  private maxRetries = 5;
+  private retryDelay = 1000;
+  private maxRetryDelay = 30000;
+  private lastHeartbeat = Date.now();
 
   constructor(supabase: SupabaseClient<Database>, userId: string) {
     this.supabase = supabase;
@@ -61,6 +69,7 @@ export class PresenceService {
         await this.leave();
       }
 
+      // Create channel with specific configuration
       this.channel = this.supabase.channel(channelName, {
         config: {
           presence: {
@@ -68,6 +77,7 @@ export class PresenceService {
           },
           broadcast: {
             self: false,
+            ack: true,
           },
         },
       });
@@ -77,17 +87,39 @@ export class PresenceService {
       // Subscribe to presence sync events
       currentChannel.on('presence', { event: 'sync' }, () => {
         // Presence state synced
+        this.retryCount = 0; // Reset retry count on successful sync
       });
 
-      // Subscribe and track user presence
+      // Subscribe and track user presence with timeout
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Subscription timeout'));
-        }, 10000);
+        // Clear any existing timeout
+        if (this.subscriptionTimeout) {
+          clearTimeout(this.subscriptionTimeout);
+        }
+
+        this.subscriptionTimeout = setTimeout(() => {
+          const error = new Error('Subscription timeout');
+          console.warn('Presence subscription timeout');
+
+          // Don't reject if we're offline or page is hidden
+          if (typeof document !== 'undefined' && document.hidden) {
+            resolve(); // Resolve anyway if page is hidden
+          } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            resolve(); // Resolve anyway if offline
+          } else {
+            reject(error);
+          }
+        }, 15000); // 15 second timeout
 
         currentChannel.subscribe(async (status) => {
+          console.log(`Presence channel status: ${status}`);
+
           if (status === 'SUBSCRIBED') {
-            clearTimeout(timeout);
+            if (this.subscriptionTimeout) {
+              clearTimeout(this.subscriptionTimeout);
+              this.subscriptionTimeout = null;
+            }
+
             try {
               const presenceData: PresenceUser = {
                 ...userData,
@@ -96,32 +128,86 @@ export class PresenceService {
 
               await currentChannel.track(presenceData);
 
-              // Start heartbeat
+              // Start heartbeat and update intervals
               this.startHeartbeat();
+              this.startUpdateInterval();
 
               resolve();
             } catch (error) {
               reject(error);
             }
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            clearTimeout(timeout);
-            reject(new Error(`Channel subscription failed: ${status}`));
+            if (this.subscriptionTimeout) {
+              clearTimeout(this.subscriptionTimeout);
+              this.subscriptionTimeout = null;
+            }
+
+            // Don't treat as error if offline or page hidden
+            if (typeof document !== 'undefined' && document.hidden) {
+              resolve();
+            } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+              resolve();
+            } else {
+              const error = new Error(`Channel subscription failed: ${status}`);
+
+              // Schedule retry if not exceeded
+              if (this.retryCount < this.maxRetries) {
+                this.scheduleRetry(channelName, userData);
+                resolve(); // Don't reject, let retry handle it
+              } else {
+                reject(error);
+              }
+            }
+          } else if (status === 'CLOSED') {
+            // Channel closed, might need to reconnect
+            if (this.retryCount < this.maxRetries && navigator.onLine && !document.hidden) {
+              this.scheduleRetry(channelName, userData);
+            }
           }
         });
       });
     } catch (error) {
-      // Don't throw for connection errors, just log them
-      if (
-        error instanceof Error &&
-        (error.message.includes('WebSocket') || error.message.includes('interrupted'))
-      ) {
-        console.log('WebSocket connection issue, will retry when online');
-      } else {
-        console.warn('Presence join error:', error);
+      // Handle specific error cases
+      if (error instanceof Error) {
+        if (error.message.includes('WebSocket') || error.message.includes('interrupted')) {
+          console.log('WebSocket connection issue, will retry when conditions improve');
+        } else if (error.message.includes('timeout')) {
+          console.log('Presence join timeout, will retry if online');
+          if (this.retryCount < this.maxRetries && navigator.onLine) {
+            this.scheduleRetry(channelName, userData);
+          }
+        } else {
+          console.warn('Presence join error:', error.message);
+        }
       }
     } finally {
       this.isJoining = false;
     }
+  }
+
+  /**
+   * Schedule a retry for failed presence join
+   */
+  private scheduleRetry(channelName: string, userData: Omit<PresenceUser, 'online_at'>): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    const delay = Math.min(this.retryDelay * Math.pow(2, this.retryCount), this.maxRetryDelay);
+    this.retryCount++;
+
+    console.log(
+      `Scheduling presence retry in ${delay}ms (attempt ${this.retryCount}/${this.maxRetries})`,
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+
+      // Only retry if conditions are favorable
+      if (navigator.onLine && !document.hidden && !this.isJoining && !this.isLeaving) {
+        this.join(channelName, userData);
+      }
+    }, delay);
   }
 
   /**
@@ -131,14 +217,29 @@ export class PresenceService {
     if (this.isLeaving) return;
 
     this.isLeaving = true;
+
+    // Stop intervals
     this.stopHeartbeat();
+    this.stopUpdateInterval();
+
+    // Clear timers
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.subscriptionTimeout) {
+      clearTimeout(this.subscriptionTimeout);
+      this.subscriptionTimeout = null;
+    }
 
     if (this.channel) {
       try {
         await this.channel.untrack();
         await this.supabase.removeChannel(this.channel);
-      } catch {
+      } catch (error) {
         // Silently handle errors during cleanup
+        console.log('Error during presence cleanup:', error);
       }
       this.channel = null;
     }
@@ -151,6 +252,7 @@ export class PresenceService {
     }
 
     this.isLeaving = false;
+    this.retryCount = 0; // Reset retry count
   }
 
   /**
@@ -205,22 +307,65 @@ export class PresenceService {
   }
 
   /**
-   * Start heartbeat to keep presence alive and update last_seen
+   * Start heartbeat to detect stale connections
    */
   private startHeartbeat(): void {
-    // Initial update
-    this.updateLastSeen();
+    this.stopHeartbeat();
 
-    // Update every 30 seconds
-    this.updateInterval = setInterval(() => {
-      this.updateLastSeen();
+    // Send heartbeat every 30 seconds
+    this.heartbeatInterval = setInterval(() => {
+      this.lastHeartbeat = Date.now();
+
+      // If channel exists and we're online, update presence
+      if (this.channel && navigator.onLine && !document.hidden) {
+        const presenceState = this.getPresenceState();
+        const myPresence = presenceState[this.userId]?.[0];
+
+        if (myPresence) {
+          // Update online_at to keep presence fresh
+          this.channel
+            .track({
+              ...myPresence,
+              online_at: new Date().toISOString(),
+            })
+            .catch(() => {
+              // If track fails, presence might be stale
+              console.log('Heartbeat failed, presence might be stale');
+            });
+        }
+      }
     }, 30000);
   }
 
   /**
-   * Stop the heartbeat interval
+   * Stop heartbeat interval
    */
   private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  /**
+   * Start update interval for last_seen
+   */
+  private startUpdateInterval(): void {
+    this.stopUpdateInterval();
+
+    // Initial update
+    this.updateLastSeen();
+
+    // Update every 60 seconds
+    this.updateInterval = setInterval(() => {
+      this.updateLastSeen();
+    }, 60000);
+  }
+
+  /**
+   * Stop the update interval
+   */
+  private stopUpdateInterval(): void {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
@@ -248,6 +393,13 @@ export class PresenceService {
    */
   getOnlineCount(): number {
     return this.getOnlineUsers().length;
+  }
+
+  /**
+   * Check if presence is stale (no heartbeat for 2 minutes)
+   */
+  isPresenceStale(): boolean {
+    return Date.now() - this.lastHeartbeat > 120000; // 2 minutes
   }
 }
 

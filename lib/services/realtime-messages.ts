@@ -1,5 +1,5 @@
 /**
- * Real-time messaging service with offline support and reconnection
+ * Real-time messaging service with improved timeout handling and reconnection
  */
 import type { Database } from '@/lib/types/database';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
@@ -32,6 +32,8 @@ interface ChannelState {
   channel: RealtimeChannel;
   status: 'unsubscribed' | 'subscribing' | 'subscribed' | 'unsubscribing' | 'error';
   subscriptionPromise?: Promise<void>;
+  retryCount: number;
+  lastError?: Error;
 }
 
 export class RealtimeMessagesService {
@@ -41,10 +43,12 @@ export class RealtimeMessagesService {
   private messageQueue: Map<string, MessageQueueItem> = new Map();
   private isConnected = false;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private timeoutTimers: Map<string, NodeJS.Timeout> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectDelay = 1000; // Start with 1 second
   private maxReconnectDelay = 30000; // Max 30 seconds
+  private subscriptionTimeout = 15000; // 15 seconds timeout
   private currentChatId: string | null = null;
   private cleanupFunctions: Map<string, () => void> = new Map();
 
@@ -55,6 +59,7 @@ export class RealtimeMessagesService {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', this.handleOnline);
       window.addEventListener('offline', this.handleOffline);
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
     }
 
     // Load queue from localStorage
@@ -68,6 +73,13 @@ export class RealtimeMessagesService {
     this.handlers = handlers;
     this.currentChatId = chatId;
 
+    // Clear any existing timeout for this chat
+    const existingTimeout = this.timeoutTimers.get(chatId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      this.timeoutTimers.delete(chatId);
+    }
+
     // Check if we already have an active subscription for this chat
     const existingState = this.channelStates.get(chatId);
 
@@ -75,6 +87,7 @@ export class RealtimeMessagesService {
       // If already subscribed, just return
       if (existingState.status === 'subscribed') {
         console.log(`Already subscribed to chat ${chatId}`);
+        this.handleConnected();
         return;
       }
 
@@ -84,9 +97,15 @@ export class RealtimeMessagesService {
         return existingState.subscriptionPromise;
       }
 
-      // If in error or unsubscribing state, remove and recreate
-      if (existingState.status === 'error' || existingState.status === 'unsubscribing') {
-        console.log(`Channel in ${existingState.status} state, cleaning up...`);
+      // If in error state and haven't exceeded retry limit, try again
+      if (existingState.status === 'error' && existingState.retryCount < 3) {
+        console.log(
+          `Retrying subscription to chat ${chatId} (attempt ${existingState.retryCount + 1})`,
+        );
+        existingState.retryCount++;
+      } else if (existingState.status === 'error') {
+        // Too many retries, clean up and start fresh
+        console.log(`Too many retries for chat ${chatId}, starting fresh`);
         await this.cleanupChannel(chatId);
       }
     }
@@ -104,9 +123,11 @@ export class RealtimeMessagesService {
       await subscriptionPromise;
     } catch (error) {
       console.error(`Failed to subscribe to chat ${chatId}:`, error);
-      // Clean up on error
-      await this.cleanupChannel(chatId);
-      throw error;
+      // Don't throw immediately, let reconnection logic handle it
+      const state = this.channelStates.get(chatId);
+      if (state) {
+        state.lastError = error as Error;
+      }
     }
   }
 
@@ -114,26 +135,31 @@ export class RealtimeMessagesService {
    * Create a new subscription for a chat
    */
   private async createSubscription(chatId: string): Promise<void> {
-    // Create channel
+    // Create channel with specific configuration
     const channel = this.supabase.channel(`chat:${chatId}`, {
       config: {
         broadcast: {
           self: true,
           ack: true,
         },
+        presence: {
+          key: chatId,
+        },
       },
     });
 
     // Store channel state
-    this.channelStates.set(chatId, {
+    const state: ChannelState = {
       channel,
       status: 'subscribing',
-    });
+      retryCount: this.channelStates.get(chatId)?.retryCount || 0,
+    };
+    this.channelStates.set(chatId, state);
 
     // Set up event listeners before subscribing
     this.setupChannelListeners(channel, chatId);
 
-    // Subscribe to channel
+    // Subscribe to channel with timeout
     return new Promise<void>((resolve, reject) => {
       let subscribeTimeout: NodeJS.Timeout | undefined;
       let resolved = false;
@@ -153,24 +179,28 @@ export class RealtimeMessagesService {
       subscribeTimeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          const state = this.channelStates.get(chatId);
-          if (state) {
-            state.status = 'error';
-          }
+          state.status = 'error';
+          state.lastError = new Error('Subscription timeout');
           cleanup();
-          reject(new Error('Subscribe timeout'));
+          reject(state.lastError);
+
+          // Schedule retry if not exceeded attempts
+          if (state.retryCount < 3) {
+            this.scheduleRetry(chatId);
+          }
         }
-      }, 10000);
+      }, this.subscriptionTimeout);
+
+      // Store timeout reference
+      this.timeoutTimers.set(chatId, subscribeTimeout);
 
       // Subscribe with status callback
       channel.subscribe((status) => {
         console.log(`Channel ${chatId} status: ${status}`);
 
-        const state = this.channelStates.get(chatId);
-        if (!state) return;
-
         if (status === 'SUBSCRIBED') {
           state.status = 'subscribed';
+          state.retryCount = 0; // Reset retry count on success
           if (!resolved) {
             resolved = true;
             this.handleConnected();
@@ -179,11 +209,19 @@ export class RealtimeMessagesService {
           }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           state.status = 'error';
+          state.lastError = new Error(`Channel subscription failed: ${status}`);
           if (!resolved) {
             resolved = true;
             this.handleDisconnected();
             cleanup();
-            reject(new Error(`Channel subscription failed: ${status}`));
+
+            // Don't reject immediately, try to recover
+            if (state.retryCount < 3) {
+              this.scheduleRetry(chatId);
+              resolve(); // Resolve to prevent promise rejection
+            } else {
+              reject(state.lastError);
+            }
           }
         } else if (status === 'CLOSED') {
           state.status = 'unsubscribed';
@@ -191,6 +229,27 @@ export class RealtimeMessagesService {
         }
       });
     });
+  }
+
+  /**
+   * Schedule a retry for a failed subscription
+   */
+  private scheduleRetry(chatId: string): void {
+    const delay = Math.min(
+      this.reconnectDelay * Math.pow(2, this.reconnectAttempts),
+      this.maxReconnectDelay,
+    );
+
+    console.log(`Scheduling retry for chat ${chatId} in ${delay}ms`);
+
+    setTimeout(() => {
+      const state = this.channelStates.get(chatId);
+      if (state && state.status === 'error' && chatId === this.currentChatId) {
+        this.subscribe(chatId, this.handlers);
+      }
+    }, delay);
+
+    this.reconnectAttempts++;
   }
 
   /**
@@ -322,6 +381,13 @@ export class RealtimeMessagesService {
     // Update status
     state.status = 'unsubscribing';
 
+    // Clear any timeouts
+    const timeout = this.timeoutTimers.get(chatId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.timeoutTimers.delete(chatId);
+    }
+
     // Run cleanup function if exists
     const cleanup = this.cleanupFunctions.get(chatId);
     if (cleanup) {
@@ -342,14 +408,19 @@ export class RealtimeMessagesService {
   }
 
   /**
-   * Unsubscribe from real-time updates
+   * Unsubscribe from all channels
    */
   async unsubscribe(): Promise<void> {
-    // Clear reconnect timer
+    // Clear all timers
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+
+    for (const timeout of this.timeoutTimers.values()) {
+      clearTimeout(timeout);
+    }
+    this.timeoutTimers.clear();
 
     // Clean up all channels
     const cleanupPromises = Array.from(this.channelStates.keys()).map((chatId) =>
@@ -516,44 +587,52 @@ export class RealtimeMessagesService {
       this.handlers.onConnectionChange(false);
     }
 
-    // Schedule reconnection
-    this.scheduleReconnect();
+    // Schedule reconnection if we have an active chat
+    if (this.currentChatId && this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.scheduleReconnect();
+    }
   };
 
   /**
    * Schedule reconnection with exponential backoff
    */
   private scheduleReconnect(): void {
-    if (this.reconnectTimer || this.reconnectAttempts >= this.maxReconnectAttempts) {
+    if (this.reconnectTimer) {
       return;
     }
+
+    const delay = Math.min(
+      this.reconnectDelay * Math.pow(2, this.reconnectAttempts),
+      this.maxReconnectDelay,
+    );
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.reconnectAttempts++;
 
       if (this.currentChatId && navigator.onLine) {
-        // Only reconnect if we have an active chat
-        const state = this.channelStates.get(this.currentChatId);
-        if (!state || state.status !== 'subscribed') {
-          this.subscribe(this.currentChatId, this.handlers);
-        }
+        // Try to reconnect to current chat
+        this.subscribe(this.currentChatId, this.handlers);
       }
-
-      // Exponential backoff
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
-    }, this.reconnectDelay);
+    }, delay);
   }
 
   /**
    * Handle online event
    */
   private handleOnline = (): void => {
+    console.log('Network online, attempting to reconnect...');
+    this.reconnectAttempts = 0;
+
     if (this.currentChatId) {
-      const state = this.channelStates.get(this.currentChatId);
-      if (!state || state.status !== 'subscribed') {
-        this.subscribe(this.currentChatId, this.handlers);
+      // Clear any existing reconnect timer
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
       }
+
+      // Try to reconnect immediately
+      this.subscribe(this.currentChatId, this.handlers);
     }
   };
 
@@ -561,9 +640,27 @@ export class RealtimeMessagesService {
    * Handle offline event
    */
   private handleOffline = (): void => {
-    // Connection will be lost automatically
-    // Just ensure we handle it gracefully
+    console.log('Network offline');
     this.isConnected = false;
+
+    // Notify handlers
+    if (this.handlers.onConnectionChange) {
+      this.handlers.onConnectionChange(false);
+    }
+  };
+
+  /**
+   * Handle page unload
+   */
+  private handleBeforeUnload = (): void => {
+    // Quick cleanup on page unload
+    for (const state of this.channelStates.values()) {
+      try {
+        state.channel.unsubscribe();
+      } catch {
+        // Ignore errors during unload
+      }
+    }
   };
 
   /**
@@ -607,6 +704,7 @@ export class RealtimeMessagesService {
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.handleOnline);
       window.removeEventListener('offline', this.handleOffline);
+      window.removeEventListener('beforeunload', this.handleBeforeUnload);
     }
 
     this.handlers = {};

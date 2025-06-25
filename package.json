@@ -16,7 +16,8 @@
     "presence:verify": "tsx scripts/verify-presence.ts",
     "preferences:check": "tsx scripts/check-preferences.ts",
     "test:realtime": "tsx scripts/test-realtime.ts",
-    "troubleshoot": "tsx scripts/troubleshoot-realtime.ts"
+    "troubleshoot": "tsx scripts/troubleshoot-realtime.ts",
+    "fix-rls": "tsx scripts/run-fix-rls.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
