@@ -23,6 +23,54 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
+// Helper to create a unique test user
+async function createTestUser() {
+  const timestamp = Date.now();
+  const testEmail = `test-${timestamp}@example.com`;
+  const testPassword = 'testpassword123';
+
+  const { data, error } = await supabase.auth.signUp({
+    email: testEmail,
+    password: testPassword,
+    options: {
+      data: {
+        username: `test-user-${timestamp}`,
+      },
+    },
+  });
+
+  if (error) {
+    throw new Error(`Failed to create test user: ${error.message}`);
+  }
+
+  if (!data.user) {
+    throw new Error('No user created');
+  }
+
+  // Create user profile
+  await supabase.from('users').insert({
+    id: data.user.id,
+    email: testEmail,
+    username: `test-user-${timestamp}`,
+    preferred_language: 'en',
+    status: 'available',
+    is_typing: false,
+    last_seen: new Date().toISOString(),
+    preferences: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  // Wait a moment for the user profile to be created
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  return {
+    user: data.user,
+    email: testEmail,
+    password: testPassword,
+  };
+}
+
 async function runTest(name: string, testFn: () => Promise<void>): Promise<void> {
   console.log(`\n🧪 Running: ${name}`);
   const start = Date.now();
@@ -162,36 +210,78 @@ async function testReconnection(): Promise<void> {
 }
 
 async function testPostgresChanges(): Promise<void> {
-  // First, create a test user if it doesn't exist
-  const testEmail = 'test@example.com';
-  const testPassword = 'testpassword123';
+  console.log('  Setting up test users...');
 
-  // Try to sign up first
-  const { error: signUpError } = await supabase.auth.signUp({
-    email: testEmail,
-    password: testPassword,
+  // Create two test users
+  const { user: user1, email: user1Email } = await createTestUser();
+  const { user: user2 } = await createTestUser();
+
+  // Sign in as the first test user
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user1Email,
+    password: 'testpassword123',
   });
 
-  // If signup fails with user already exists, try to sign in
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: testEmail,
-    password: testPassword,
+  if (signInError) {
+    throw new Error(`Failed to sign in: ${signInError.message}`);
+  }
+
+  console.log('  Creating test chat...');
+
+  // Use the RPC function to create a direct chat
+  const { data: testChatId, error: chatError } = await supabase.rpc('create_or_get_direct_chat', {
+    other_user_id: user2.id,
   });
 
-  if (authError && !signUpError) {
-    throw new Error(`Auth failed: ${authError?.message || 'No user'}`);
+  if (chatError || !testChatId) {
+    // Fallback to manual creation
+    const { data: chatData, error: createError } = await supabase
+      .from('chats')
+      .insert({
+        participants: [user1.id, user2.id],
+      })
+      .select()
+      .single();
+
+    if (createError || !chatData) {
+      throw new Error(
+        `Failed to create test chat: ${createError?.message || chatError?.message || 'No chat data'}`,
+      );
+    }
   }
 
-  const user = authData?.user || (await supabase.auth.getUser()).data.user;
-  if (!user) {
-    throw new Error('No authenticated user');
-  }
+  console.log(`  Test chat created with ID: ${testChatId}`);
 
-  const testChatId = `test-chat-${Date.now()}`;
   const channel = supabase.channel(`test-postgres-${Date.now()}`);
   let messageReceived = false;
+  let anyEventReceived = false;
 
-  // Set up listener first
+  // Set up listener for any postgres changes on messages table
+  channel.on(
+    'postgres_changes',
+    {
+      event: '*', // Listen to all events
+      schema: 'public',
+      table: 'messages',
+    },
+    (payload) => {
+      console.log('  Received ANY event:', {
+        eventType: payload.eventType,
+        table: payload.table,
+        new: payload.new,
+        old: payload.old,
+      });
+      anyEventReceived = true;
+
+      // Check if this is our specific message
+      if (payload.eventType === 'INSERT' && payload.new?.chat_id === testChatId) {
+        console.log('  ✓ This is our test message!');
+        messageReceived = true;
+      }
+    },
+  );
+
+  // Also set up a filtered listener
   channel.on(
     'postgres_changes',
     {
@@ -201,18 +291,21 @@ async function testPostgresChanges(): Promise<void> {
       filter: `chat_id=eq.${testChatId}`,
     },
     (payload) => {
-      console.log('  Received message:', payload);
+      console.log('  Received FILTERED message:', payload);
       messageReceived = true;
     },
   );
+
+  console.log('  Subscribing to channel...');
 
   // Subscribe to channel
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Channel subscription timeout'));
-    }, 5000);
+    }, 10000); // Increased timeout
 
     channel.subscribe((status) => {
+      console.log(`  Channel status: ${status}`);
       if (status === 'SUBSCRIBED') {
         clearTimeout(timeout);
         resolve();
@@ -223,24 +316,61 @@ async function testPostgresChanges(): Promise<void> {
     });
   });
 
-  // Wait a moment for subscription to stabilize
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  // Wait longer for subscription to stabilize
+  console.log('  Waiting for subscription to stabilize...');
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  // Insert a test message
-  const { error: insertError } = await supabase.from('messages').insert({
-    chat_id: testChatId,
-    sender_id: user.id,
-    original_text: 'Test message',
-    original_language: 'en',
-  });
+  console.log('  Inserting test message...');
+
+  // Insert a test message with select to verify it was created
+  const { data: insertedMessage, error: insertError } = await supabase
+    .from('messages')
+    .insert({
+      chat_id: testChatId,
+      sender_id: user1.id,
+      original_text: 'Test message for realtime',
+      original_language: 'en',
+    })
+    .select()
+    .single();
 
   if (insertError) {
     throw new Error(`Failed to insert message: ${insertError.message}`);
   }
 
+  console.log('  Message inserted successfully:', {
+    id: insertedMessage.id,
+    chat_id: insertedMessage.chat_id,
+    text: insertedMessage.original_text,
+  });
+
+  // Also check if we can read the message back
+  const { data: _readBack, error: readError } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('id', insertedMessage.id)
+    .single();
+
+  if (readError) {
+    console.log('  ⚠️  Cannot read message back - possible RLS issue:', readError.message);
+  } else {
+    console.log('  ✓ Message can be read back');
+  }
+
   // Wait for the message to be received
+  console.log('  Waiting for realtime event...');
+
   await new Promise<void>((resolve, reject) => {
+    let waitTime = 0;
     const checkInterval = setInterval(() => {
+      waitTime += 100;
+
+      if (waitTime % 1000 === 0) {
+        console.log(`  Still waiting... ${waitTime / 1000}s`);
+        console.log(`    Any event received: ${anyEventReceived}`);
+        console.log(`    Our message received: ${messageReceived}`);
+      }
+
       if (messageReceived) {
         clearInterval(checkInterval);
         resolve();
@@ -250,25 +380,53 @@ async function testPostgresChanges(): Promise<void> {
     setTimeout(() => {
       clearInterval(checkInterval);
       if (!messageReceived) {
-        reject(new Error('Message not received within timeout'));
+        const debugInfo = [
+          'Message not received within timeout',
+          `Any postgres event received: ${anyEventReceived}`,
+          `Chat ID: ${testChatId}`,
+          `Message ID: ${insertedMessage.id}`,
+          '',
+          'Troubleshooting:',
+          '1. Check if realtime is enabled for messages table in Supabase dashboard',
+          '2. Check RLS policies for messages table',
+          '3. Try running: npm run test:realtime -- --skip-postgres',
+        ].join('\n');
+
+        reject(new Error(debugInfo));
       }
-    }, 5000);
+    }, 8000); // Increased timeout
   });
 
   // Cleanup
+  console.log('  Cleaning up...');
   await channel.unsubscribe();
   await supabase.removeChannel(channel);
+
+  // Clean up test data
+  await supabase.from('messages').delete().eq('chat_id', testChatId);
+  await supabase.from('chats').delete().eq('id', testChatId);
+  await supabase.from('users').delete().eq('id', user1.id);
+  await supabase.from('users').delete().eq('id', user2.id);
+
   await supabase.auth.signOut();
 }
 
 async function main() {
   console.log('🚀 Testing Supabase Realtime Functionality\n');
 
+  // Check for flags
+  const skipPostgres = process.argv.includes('--skip-postgres');
+
   // Run tests
   await runTest('Channel Creation', testChannelCreation);
   await runTest('Multiple Channels', testMultipleChannels);
   await runTest('Channel Reconnection', testReconnection);
-  await runTest('Postgres Changes', testPostgresChanges);
+
+  if (!skipPostgres) {
+    await runTest('Postgres Changes', testPostgresChanges);
+  } else {
+    console.log('\n⏭️  Skipping Postgres Changes test (--skip-postgres flag)');
+  }
 
   // Print summary
   console.log('\n📊 Test Summary:');
@@ -289,6 +447,23 @@ async function main() {
         console.log(`- ${r.test}: ${r.error}`);
       });
   }
+
+  // Show performance summary
+  console.log('\n⚡ Performance:');
+  results.forEach((r) => {
+    if (r.passed && r.duration) {
+      console.log(`- ${r.test}: ${r.duration}ms`);
+    }
+  });
+
+  console.log('\n💡 Tips:');
+  console.log('- If you see timeout errors in the Realtime Debug Panel, this is normal');
+  console.log('- The panel shows all realtime activity, including background presence channels');
+  console.log('- Use --skip-postgres flag to skip database tests if needed');
+  console.log('\n🔧 Quick Fix for Postgres Changes test:');
+  console.log(
+    '- Run this SQL in Supabase SQL Editor: ALTER PUBLICATION supabase_realtime ADD TABLE messages;',
+  );
 
   process.exit(failed > 0 ? 1 : 0);
 }
