@@ -7,15 +7,21 @@ import { LoadingPage } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/lib/context/auth-context';
 import { useTypingIndicator } from '@/lib/hooks/usePresence';
 import { useRealtimeChat } from '@/lib/hooks/useRealtimeChat';
+import { useSupabase } from '@/lib/hooks/useSupabase';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { Database } from '@/lib/types/database';
 import { getLanguageName } from '@/lib/utils/languages';
-import { ArrowLeftIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowLeftIcon,
+  BugAntIcon,
+  InformationCircleIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export default function ChatConversationPage() {
   const params = useParams();
@@ -24,10 +30,15 @@ export default function ChatConversationPage() {
   const { user } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();
+  const supabase = useSupabase();
   const [replyTo, setReplyTo] = useState<Database['public']['Tables']['messages']['Row'] | null>(
     null,
   );
   const [showInfo, setShowInfo] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [fullParticipants, setFullParticipants] = useState<
+    Database['public']['Tables']['users']['Row'][]
+  >([]);
 
   const {
     messages,
@@ -50,6 +61,22 @@ export default function ChatConversationPage() {
   });
 
   const { typingUsers } = useTypingIndicator(chatId);
+
+  // Load full participant data including emails
+  useEffect(() => {
+    const loadFullParticipants = async () => {
+      if (participants.length > 0) {
+        const participantIds = participants.map((p) => p.id);
+        const { data, error } = await supabase.from('users').select('*').in('id', participantIds);
+
+        if (!error && data) {
+          setFullParticipants(data);
+        }
+      }
+    };
+
+    loadFullParticipants();
+  }, [participants, supabase]);
 
   // Get other participants
   const otherParticipants = participants.filter((p) => p.id !== user?.id);
@@ -214,10 +241,30 @@ export default function ChatConversationPage() {
         </div>
       )}
 
-      {/* Debug Panel - Only in development */}
+      {/* Debug Toggle Button - Only in development */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-20 right-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-lg max-w-sm border border-slate-200 dark:border-slate-700">
-          <h3 className="font-bold mb-2 text-midnight-900 dark:text-slate-100">🐛 Debug Info</h3>
+        <button
+          onClick={() => setShowDebugPanel(!showDebugPanel)}
+          className="fixed bottom-20 right-4 bg-slate-800 dark:bg-slate-700 text-white p-2 rounded-full shadow-lg hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors z-40"
+          aria-label="Toggle Debug Panel"
+        >
+          <BugAntIcon className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Debug Panel - Only in development and when toggled */}
+      {process.env.NODE_ENV === 'development' && showDebugPanel && (
+        <div className="fixed bottom-20 right-16 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-lg max-w-sm border border-slate-200 dark:border-slate-700 z-40">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-midnight-900 dark:text-slate-100">🐛 Debug Info</h3>
+            <button
+              onClick={() => setShowDebugPanel(false)}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
+              aria-label="Close Debug Panel"
+            >
+              <XMarkIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+            </button>
+          </div>
           <div className="text-xs space-y-1 text-slate-600 dark:text-slate-400">
             <p>
               <strong>Chat ID:</strong> {chatId}
@@ -257,16 +304,19 @@ export default function ChatConversationPage() {
               </p>
               <ul className="list-disc list-inside ml-4">
                 {participants.map((p) => (
-                  <li key={p.username} className="mb-2">
+                  <li key={p.id} className="mb-2">
                     <div>
                       <strong>ID:</strong> {p.id}
                     </div>
                     <div>
                       <strong>Username:</strong> {p.username}
                     </div>
-                    <div>
-                      <strong>Email:</strong> {p.email}
-                    </div>
+                    {fullParticipants.find((fp) => fp.id === p.id) && (
+                      <div>
+                        <strong>Email:</strong>{' '}
+                        {fullParticipants.find((fp) => fp.id === p.id)?.email}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

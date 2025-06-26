@@ -15,6 +15,17 @@ type UserRow = Tables['users']['Row'];
 type ReactionRow = Tables['message_reactions']['Row'];
 type ReadReceiptRow = Tables['read_receipts']['Row'];
 
+// Type for RPC get_chat_participants response
+interface RPCParticipant {
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  preferred_language: string;
+  status: Database['public']['Enums']['user_status'];
+  is_typing: boolean;
+  last_seen: string;
+}
+
 interface UseRealtimeChatOptions {
   chatId: string;
   onNewMessage?: (message: MessageRow) => void;
@@ -96,23 +107,10 @@ export function useRealtimeChat({
       // Check if user is a participant
       if (!chatData.participants.includes(user.id)) {
         console.error('❌ User is not a participant in this chat!');
-        // Try to add user as participant (for testing)
-        const { error: updateError } = await supabase
-          .from('chats')
-          .update({
-            participants: [...chatData.participants, user.id],
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', chatId);
-
-        if (updateError) {
-          console.error('❌ Failed to add user as participant:', updateError);
-          throw new Error('You are not a participant in this chat');
-        }
-        console.log('✅ Added user as participant');
+        throw new Error('You are not a participant in this chat');
       }
 
-      // Load participants
+      // Load participants using RPC
       const { data: participantData, error: participantError } = await supabase.rpc(
         'get_chat_participants',
         { p_chat_id: chatId },
@@ -135,10 +133,25 @@ export function useRealtimeChat({
         setParticipants(fallbackData || []);
         participantsRef.current = fallbackData || [];
       } else {
-        console.log('✅ Loaded participants:', participantData);
-        const participants = participantData ?? [];
-        setParticipants(participants);
-        participantsRef.current = participants;
+        console.log('✅ Loaded participants via RPC:', participantData);
+
+        // Map the RPC response to match UserRow structure
+        const mappedParticipants: UserRow[] = (participantData || []).map((p: RPCParticipant) => ({
+          id: p.user_id, // Map user_id to id
+          email: '', // RPC doesn't return email, set empty
+          username: p.username,
+          avatar_url: p.avatar_url,
+          preferred_language: p.preferred_language,
+          status: p.status,
+          is_typing: p.is_typing,
+          last_seen: p.last_seen,
+          preferences: {}, // RPC doesn't return preferences
+          created_at: '', // RPC doesn't return created_at
+          updated_at: '', // RPC doesn't return updated_at
+        }));
+
+        setParticipants(mappedParticipants);
+        participantsRef.current = mappedParticipants;
       }
 
       // Load messages with detailed logging
