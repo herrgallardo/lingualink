@@ -59,7 +59,6 @@ export class NotificationService {
     // If currently initializing, wait for it to complete
     if (this.initializePromise) {
       await this.initializePromise;
-      // Check again if we're initialized for the right user
       if (this.isInitialized && this.userId === userId) {
         return;
       }
@@ -95,13 +94,11 @@ export class NotificationService {
         await this.requestNotificationPermission();
       } catch (error) {
         console.warn('Failed to setup browser notifications:', error);
-        // Continue anyway - in-app notifications will still work
       }
 
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize notification service:', error);
-      // Still mark as initialized so we don't keep retrying
       this.isInitialized = true;
     }
   }
@@ -132,11 +129,6 @@ export class NotificationService {
 
       if (testError) {
         console.warn('Cannot access notifications table:', testError.message);
-        console.warn('Notifications will work without realtime updates.');
-        console.warn('To enable realtime notifications:');
-        console.warn('1. Ensure the notifications table exists');
-        console.warn('2. Enable realtime for the notifications table in Supabase dashboard');
-        console.warn('3. Check RLS policies allow SELECT for authenticated users');
         return;
       }
 
@@ -158,17 +150,17 @@ export class NotificationService {
         },
       );
 
-      // Subscribe to the channel with error handling
+      // Subscribe to the channel
       await new Promise<void>((resolve) => {
         if (!this.channel) {
-          resolve(); // Just continue without realtime
+          resolve();
           return;
         }
 
         const timeout = setTimeout(() => {
           console.warn('Notification realtime subscription timeout - continuing without realtime');
-          resolve(); // Don't reject, just continue without realtime
-        }, 5000); // Reduced timeout
+          resolve();
+        }, 5000);
 
         this.channel.subscribe((status) => {
           console.log(`Notification channel status: ${status}`);
@@ -180,14 +172,12 @@ export class NotificationService {
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             clearTimeout(timeout);
             console.warn(`Notification realtime subscription failed: ${status}`);
-            resolve(); // Don't reject, just continue without realtime
+            resolve();
           }
         });
       });
     } catch (error) {
       console.warn('Failed to setup realtime notifications:', error);
-      console.warn('Notifications will work without realtime updates.');
-      // Don't throw - notifications can still work without realtime
     }
   }
 
@@ -283,14 +273,27 @@ export class NotificationService {
 
     const subscriptionObj = subscription.toJSON();
 
-    await this.supabase.from('push_subscriptions').upsert({
-      user_id: this.userId,
-      endpoint: subscription.endpoint,
-      p256dh: subscriptionObj.keys?.p256dh || '',
-      auth: subscriptionObj.keys?.auth || '',
-      user_agent: navigator.userAgent,
-      last_used: new Date().toISOString(),
-    });
+    try {
+      // Use upsert with onConflict to handle duplicates
+      await this.supabase.from('push_subscriptions').upsert(
+        {
+          user_id: this.userId,
+          endpoint: subscription.endpoint,
+          p256dh: subscriptionObj.keys?.p256dh || '',
+          auth: subscriptionObj.keys?.auth || '',
+          user_agent: navigator.userAgent,
+          last_used: new Date().toISOString(),
+        },
+        {
+          onConflict: 'user_id,endpoint',
+        },
+      );
+    } catch (error) {
+      // Silently handle duplicate key errors
+      if (error && typeof error === 'object' && 'code' in error && error.code !== '23505') {
+        console.error('Failed to save push subscription:', error);
+      }
+    }
   }
 
   /**
@@ -305,8 +308,7 @@ export class NotificationService {
       return;
     }
 
-    // Cast to any to avoid TypeScript errors with the actions property
-    const options: NotificationOptions & { actions?: { action: string; title: string }[] } = {
+    const options: NotificationOptions = {
       body: notification.body,
       icon: '/icon-192.png',
       badge: '/badge-72.png',
@@ -317,20 +319,6 @@ export class NotificationService {
         ...notification.data,
       },
     };
-
-    // Add actions if supported (not all browsers support notification actions)
-    if ('actions' in Notification.prototype) {
-      options.actions = [
-        {
-          action: 'view',
-          title: 'View',
-        },
-        {
-          action: 'dismiss',
-          title: 'Dismiss',
-        },
-      ];
-    }
 
     const browserNotification = new Notification(notification.title, options);
 

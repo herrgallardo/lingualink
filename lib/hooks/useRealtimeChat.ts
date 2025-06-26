@@ -57,14 +57,12 @@ export function useRealtimeChat({
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
 
-  // Use refs to track state and prevent multiple operations
   const serviceRef = useRef<RealtimeMessagesService | null>(null);
   const soundManager = useRef(getSoundManager());
   const notificationServiceRef = useRef(getNotificationService(supabase));
   const participantsRef = useRef<UserRow[]>([]);
-  const isSubscribingRef = useRef(false);
-  const isCleaningUpRef = useRef(false);
-  const previousChatIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const initializingRef = useRef(false);
 
   // Update participants ref when participants change
   useEffect(() => {
@@ -75,9 +73,6 @@ export function useRealtimeChat({
   const loadInitialData = useCallback(async () => {
     if (!user || !chatId) return;
 
-    setLoading(true);
-    setError(null);
-
     try {
       // Load participants
       const { data: participantData, error: participantError } = await supabase.rpc(
@@ -87,7 +82,6 @@ export function useRealtimeChat({
 
       if (participantError) throw participantError;
 
-      // Ensure participantData is an array
       const participants = participantData ?? [];
       setParticipants(participants);
       participantsRef.current = participants;
@@ -106,9 +100,10 @@ export function useRealtimeChat({
       setMessages(sortedMessages);
       setHasMore((messageData?.length ?? 0) === MESSAGES_PER_PAGE);
 
-      // Load reactions for these messages
+      // Load reactions and read receipts
       if (sortedMessages.length > 0) {
         const messageIds = sortedMessages.map((m) => m.id);
+
         const { data: reactionData } = await supabase
           .from('message_reactions')
           .select('*')
@@ -126,7 +121,6 @@ export function useRealtimeChat({
           setReactions(reactionsByMessage);
         }
 
-        // Load read receipts
         const { data: receiptData } = await supabase
           .from('read_receipts')
           .select('*')
@@ -146,84 +140,90 @@ export function useRealtimeChat({
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to load chat data'));
-    } finally {
-      setLoading(false);
     }
   }, [user, chatId, supabase]);
 
-  // Initialize notification service once when user changes
+  // Initialize everything
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Initialize notification service
   useEffect(() => {
     if (!user) return;
     notificationServiceRef.current.initialize(user.id);
   }, [user]);
 
-  // Create realtime service instance once
+  // Create realtime service
   useEffect(() => {
     if (!serviceRef.current) {
       serviceRef.current = new RealtimeMessagesService(supabase);
     }
 
-    // Cleanup on unmount
     return () => {
-      if (serviceRef.current && !isCleaningUpRef.current) {
-        isCleaningUpRef.current = true;
+      if (serviceRef.current && mountedRef.current === false) {
         const service = serviceRef.current;
         serviceRef.current = null;
-        service.cleanup().catch(console.error);
+        service.cleanup();
       }
     };
   }, [supabase]);
 
-  // Subscribe to realtime updates when chatId changes
+  // Main initialization effect
   useEffect(() => {
-    if (!user || !chatId || !serviceRef.current) return;
+    if (!user || !chatId || !serviceRef.current || initializingRef.current) return;
 
-    // Check if we're already subscribing or if it's the same chat
-    if (isSubscribingRef.current || previousChatIdRef.current === chatId) {
-      return;
-    }
+    let cancelled = false;
+    initializingRef.current = true;
 
-    isSubscribingRef.current = true;
-    previousChatIdRef.current = chatId;
+    const initializeChat = async () => {
+      setLoading(true);
+      setError(null);
 
-    const currentService = serviceRef.current;
-    const currentUserId = user.id;
-    let mounted = true;
-
-    const subscribe = async () => {
       try {
-        await currentService.subscribe(chatId, {
+        // First load the data
+        await loadInitialData();
+
+        if (cancelled) return;
+
+        // Get the service reference
+        const service = serviceRef.current;
+        if (!service) {
+          throw new Error('Realtime service not initialized');
+        }
+
+        // Then subscribe to realtime updates
+        await service.subscribe(chatId, {
           onNewMessage: (message) => {
-            if (!mounted) return;
+            if (cancelled) return;
 
             setMessages((prev) => {
-              // Check if message already exists (optimistic update)
-              const exists = prev.some((m) => m.id === message.id || m.id === message.sender_id);
+              const exists = prev.some((m) => m.id === message.id);
               if (exists) {
-                // Replace temp message with real one
-                return prev.map((m) => (m.id === message.sender_id ? message : m));
+                return prev.map((m) => (m.id === message.id ? message : m));
               }
               return [...prev, message];
             });
 
-            // Play sound for messages from others
             if (
               playMessageSound &&
-              message.sender_id !== currentUserId &&
+              message.sender_id !== user.id &&
               soundManager.current.isEnabled()
             ) {
               soundManager.current.play('message');
             }
 
-            // Call custom handler
             onNewMessage?.(message);
 
-            // Create notification for messages from others
-            if (message.sender_id !== currentUserId) {
+            if (message.sender_id !== user.id) {
               const sender = participantsRef.current.find((p) => p.id === message.sender_id);
               if (sender) {
                 notificationServiceRef.current.createNotification({
-                  userId: currentUserId,
+                  userId: user.id,
                   title: sender.username,
                   body: message.original_text,
                   type: 'message',
@@ -237,15 +237,15 @@ export function useRealtimeChat({
             }
           },
           onMessageUpdated: (message) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
           },
           onMessageDeleted: (messageId) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setMessages((prev) => prev.filter((m) => m.id !== messageId));
           },
           onReactionAdded: (reaction) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setReactions((prev) => {
               const existing = prev[reaction.message_id] ?? [];
               return {
@@ -255,7 +255,7 @@ export function useRealtimeChat({
             });
           },
           onReactionRemoved: (reaction) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setReactions((prev) => {
               const existing = prev[reaction.message_id] ?? [];
               return {
@@ -265,7 +265,7 @@ export function useRealtimeChat({
             });
           },
           onReadReceipt: (receipt) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setReadReceipts((prev) => {
               const existing = prev[receipt.message_id] ?? [];
               return {
@@ -275,43 +275,47 @@ export function useRealtimeChat({
             });
           },
           onConnectionChange: (connected) => {
-            if (!mounted) return;
+            if (cancelled) return;
             setIsConnected(connected);
           },
         });
 
-        // Load initial data after subscribing
-        if (mounted) {
-          await loadInitialData();
+        if (!cancelled) {
+          setIsConnected(true);
         }
       } catch (err) {
-        console.error('Failed to subscribe to chat:', err);
-        if (mounted) {
+        if (!cancelled) {
+          console.error('Failed to initialize chat:', err);
           setError(err instanceof Error ? err : new Error('Failed to connect to chat'));
         }
       } finally {
-        isSubscribingRef.current = false;
+        if (!cancelled) {
+          setLoading(false);
+          initializingRef.current = false;
+        }
       }
     };
 
-    subscribe();
+    initializeChat();
 
-    // Cleanup function for this specific subscription
     return () => {
-      mounted = false;
+      cancelled = true;
+      initializingRef.current = false;
     };
   }, [user, chatId, loadInitialData, onNewMessage, playMessageSound]);
 
   // Send message
   const sendMessage = useCallback(
     async (text: string, replyTo?: string) => {
-      if (!user || !chatId || !serviceRef.current) return;
+      if (!user || !chatId || !serviceRef.current) {
+        throw new Error('Chat not initialized');
+      }
 
       const messageData = {
         chat_id: chatId,
         sender_id: user.id,
         original_text: text,
-        original_language: 'en', // This should be detected or user-specified
+        original_language: 'en',
         reply_to: replyTo ?? null,
       };
 
@@ -368,7 +372,6 @@ export function useRealtimeChat({
       });
 
       if (error && error.code !== '23505') {
-        // Ignore duplicate key errors
         throw error;
       }
     },
@@ -436,6 +439,32 @@ export function useRealtimeChat({
     setHasMore(true);
     await loadInitialData();
   }, [loadInitialData]);
+
+  // Mark messages as read
+  useEffect(() => {
+    if (!user || messages.length === 0) return;
+
+    const unreadMessages = messages.filter(
+      (msg) =>
+        msg.sender_id !== user.id && !readReceipts[msg.id]?.some((r) => r.user_id === user.id),
+    );
+
+    if (unreadMessages.length === 0) return;
+
+    const markAsRead = async () => {
+      for (const message of unreadMessages) {
+        await supabase
+          .from('read_receipts')
+          .insert({
+            message_id: message.id,
+            user_id: user.id,
+          })
+          .select();
+      }
+    };
+
+    markAsRead();
+  }, [messages, user, readReceipts, supabase]);
 
   return {
     messages,
