@@ -229,11 +229,48 @@ export default function ChatConversationPage() {
               <strong>Connected:</strong> {isConnected ? '✅' : '❌'}
             </p>
             <p>
-              <strong>Messages:</strong> {messages.length}
+              <strong>Messages (count):</strong> {messages.length}
             </p>
-            <p>
-              <strong>Participants:</strong> {participants.length}
-            </p>
+            <div>
+              <p>
+                <strong>Message IDs:</strong>
+              </p>
+              <ul className="list-disc list-inside ml-4">
+                {messages.map((m) => (
+                  <li key={m.id}>{m.id}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p>
+                <strong>Sender IDs:</strong>
+              </p>
+              <ul className="list-disc list-inside ml-4">
+                {messages.map((m) => (
+                  <li key={`sender-${m.id}`}>{m.sender_id}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p>
+                <strong>Participants (count):</strong> {participants.length}
+              </p>
+              <ul className="list-disc list-inside ml-4">
+                {participants.map((p) => (
+                  <li key={p.username} className="mb-2">
+                    <div>
+                      <strong>ID:</strong> {p.id}
+                    </div>
+                    <div>
+                      <strong>Username:</strong> {p.username}
+                    </div>
+                    <div>
+                      <strong>Email:</strong> {p.email}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <p>
               <strong>Loading:</strong> {loading ? 'Yes' : 'No'}
             </p>
