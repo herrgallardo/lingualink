@@ -1,5 +1,5 @@
 /**
- * Hook for real-time chat functionality
+ * Hook for real-time chat functionality with enhanced debugging
  */
 import { useAuth } from '@/lib/context/auth-context';
 import { useSupabase } from '@/lib/hooks/useSupabase';
@@ -69,32 +69,97 @@ export function useRealtimeChat({
     participantsRef.current = participants;
   }, [participants]);
 
-  // Load initial data
+  // Load initial data with enhanced debugging
   const loadInitialData = useCallback(async () => {
-    if (!user || !chatId) return;
+    if (!user || !chatId) {
+      console.log('loadInitialData: Missing user or chatId', { user, chatId });
+      return;
+    }
+
+    console.log('🔄 Loading initial data for chat:', chatId, 'user:', user.id);
 
     try {
+      // First, verify the chat exists and user is a participant
+      const { data: chatData, error: chatError } = await supabase
+        .from('chats')
+        .select('*')
+        .eq('id', chatId)
+        .single();
+
+      if (chatError) {
+        console.error('❌ Failed to load chat:', chatError);
+        throw chatError;
+      }
+
+      console.log('✅ Chat data:', chatData);
+
+      // Check if user is a participant
+      if (!chatData.participants.includes(user.id)) {
+        console.error('❌ User is not a participant in this chat!');
+        // Try to add user as participant (for testing)
+        const { error: updateError } = await supabase
+          .from('chats')
+          .update({
+            participants: [...chatData.participants, user.id],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', chatId);
+
+        if (updateError) {
+          console.error('❌ Failed to add user as participant:', updateError);
+          throw new Error('You are not a participant in this chat');
+        }
+        console.log('✅ Added user as participant');
+      }
+
       // Load participants
       const { data: participantData, error: participantError } = await supabase.rpc(
         'get_chat_participants',
         { p_chat_id: chatId },
       );
 
-      if (participantError) throw participantError;
+      if (participantError) {
+        console.error('❌ Failed to load participants:', participantError);
+        // Fallback: try direct query
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('users')
+          .select('*')
+          .in('id', chatData.participants);
 
-      const participants = participantData ?? [];
-      setParticipants(participants);
-      participantsRef.current = participants;
+        if (fallbackError) {
+          console.error('❌ Fallback participant load failed:', fallbackError);
+          throw participantError;
+        }
 
-      // Load messages
-      const { data: messageData, error: messageError } = await supabase
+        console.log('✅ Loaded participants via fallback:', fallbackData);
+        setParticipants(fallbackData || []);
+        participantsRef.current = fallbackData || [];
+      } else {
+        console.log('✅ Loaded participants:', participantData);
+        const participants = participantData ?? [];
+        setParticipants(participants);
+        participantsRef.current = participants;
+      }
+
+      // Load messages with detailed logging
+      console.log('🔄 Loading messages...');
+      const {
+        data: messageData,
+        error: messageError,
+        count,
+      } = await supabase
         .from('messages')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('chat_id', chatId)
         .order('timestamp', { ascending: false })
         .limit(MESSAGES_PER_PAGE);
 
-      if (messageError) throw messageError;
+      if (messageError) {
+        console.error('❌ Failed to load messages:', messageError);
+        throw messageError;
+      }
+
+      console.log(`✅ Loaded ${messageData?.length || 0} messages (total: ${count}):`, messageData);
 
       const sortedMessages = (messageData ?? []).reverse();
       setMessages(sortedMessages);
@@ -104,12 +169,15 @@ export function useRealtimeChat({
       if (sortedMessages.length > 0) {
         const messageIds = sortedMessages.map((m) => m.id);
 
-        const { data: reactionData } = await supabase
+        const { data: reactionData, error: reactionError } = await supabase
           .from('message_reactions')
           .select('*')
           .in('message_id', messageIds);
 
-        if (reactionData) {
+        if (reactionError) {
+          console.error('⚠️ Failed to load reactions:', reactionError);
+        } else if (reactionData) {
+          console.log('✅ Loaded reactions:', reactionData);
           const reactionsByMessage = reactionData.reduce<Record<string, ReactionRow[]>>(
             (acc, reaction) => {
               const arr = acc[reaction.message_id] ?? [];
@@ -121,12 +189,15 @@ export function useRealtimeChat({
           setReactions(reactionsByMessage);
         }
 
-        const { data: receiptData } = await supabase
+        const { data: receiptData, error: receiptError } = await supabase
           .from('read_receipts')
           .select('*')
           .in('message_id', messageIds);
 
-        if (receiptData) {
+        if (receiptError) {
+          console.error('⚠️ Failed to load read receipts:', receiptError);
+        } else if (receiptData) {
+          console.log('✅ Loaded read receipts:', receiptData);
           const receiptsByMessage = receiptData.reduce<Record<string, ReadReceiptRow[]>>(
             (acc, receipt) => {
               const arr = acc[receipt.message_id] ?? [];
@@ -138,7 +209,10 @@ export function useRealtimeChat({
           setReadReceipts(receiptsByMessage);
         }
       }
+
+      console.log('✅ Initial data load complete');
     } catch (err) {
+      console.error('❌ loadInitialData error:', err);
       setError(err instanceof Error ? err : new Error('Failed to load chat data'));
     }
   }, [user, chatId, supabase]);
@@ -181,6 +255,7 @@ export function useRealtimeChat({
     initializingRef.current = true;
 
     const initializeChat = async () => {
+      console.log('🚀 Initializing chat:', chatId);
       setLoading(true);
       setError(null);
 
@@ -197,9 +272,11 @@ export function useRealtimeChat({
         }
 
         // Then subscribe to realtime updates
+        console.log('🔄 Subscribing to realtime updates...');
         await service.subscribe(chatId, {
           onNewMessage: (message) => {
             if (cancelled) return;
+            console.log('📨 New message received:', message);
 
             setMessages((prev) => {
               const exists = prev.some((m) => m.id === message.id);
@@ -238,14 +315,17 @@ export function useRealtimeChat({
           },
           onMessageUpdated: (message) => {
             if (cancelled) return;
+            console.log('✏️ Message updated:', message);
             setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
           },
           onMessageDeleted: (messageId) => {
             if (cancelled) return;
+            console.log('🗑️ Message deleted:', messageId);
             setMessages((prev) => prev.filter((m) => m.id !== messageId));
           },
           onReactionAdded: (reaction) => {
             if (cancelled) return;
+            console.log('😀 Reaction added:', reaction);
             setReactions((prev) => {
               const existing = prev[reaction.message_id] ?? [];
               return {
@@ -256,6 +336,7 @@ export function useRealtimeChat({
           },
           onReactionRemoved: (reaction) => {
             if (cancelled) return;
+            console.log('😢 Reaction removed:', reaction);
             setReactions((prev) => {
               const existing = prev[reaction.message_id] ?? [];
               return {
@@ -266,6 +347,7 @@ export function useRealtimeChat({
           },
           onReadReceipt: (receipt) => {
             if (cancelled) return;
+            console.log('👁️ Read receipt:', receipt);
             setReadReceipts((prev) => {
               const existing = prev[receipt.message_id] ?? [];
               return {
@@ -276,16 +358,18 @@ export function useRealtimeChat({
           },
           onConnectionChange: (connected) => {
             if (cancelled) return;
+            console.log(connected ? '✅ Connected to realtime' : '❌ Disconnected from realtime');
             setIsConnected(connected);
           },
         });
 
         if (!cancelled) {
           setIsConnected(true);
+          console.log('✅ Chat initialization complete');
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Failed to initialize chat:', err);
+          console.error('❌ Failed to initialize chat:', err);
           setError(err instanceof Error ? err : new Error('Failed to connect to chat'));
         }
       } finally {
@@ -304,12 +388,15 @@ export function useRealtimeChat({
     };
   }, [user, chatId, loadInitialData, onNewMessage, playMessageSound]);
 
-  // Send message
+  // Send message with enhanced logging
   const sendMessage = useCallback(
     async (text: string, replyTo?: string) => {
-      if (!user || !chatId || !serviceRef.current) {
+      if (!user || !chatId) {
+        console.error('❌ Cannot send message: missing user or chatId');
         throw new Error('Chat not initialized');
       }
+
+      console.log('📤 Sending message:', { text, chatId, userId: user.id });
 
       const messageData = {
         chat_id: chatId,
@@ -317,14 +404,34 @@ export function useRealtimeChat({
         original_text: text,
         original_language: 'en',
         reply_to: replyTo ?? null,
+        timestamp: new Date().toISOString(),
       };
 
-      const result = await serviceRef.current.sendMessage(messageData);
-      if (result.error) {
-        throw result.error;
+      try {
+        // Direct insert to test
+        const { data, error } = await supabase
+          .from('messages')
+          .insert(messageData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('❌ Failed to send message:', error);
+          throw error;
+        }
+
+        console.log('✅ Message sent successfully:', data);
+
+        // If we're not getting realtime updates, manually add the message
+        if (!serviceRef.current) {
+          setMessages((prev) => [...prev, data]);
+        }
+      } catch (error) {
+        console.error('❌ Send message error:', error);
+        throw error;
       }
     },
-    [user, chatId],
+    [user, chatId, supabase],
   );
 
   // Edit message
@@ -435,6 +542,7 @@ export function useRealtimeChat({
 
   // Refresh data
   const refresh = useCallback(async () => {
+    console.log('🔄 Refreshing chat data...');
     setPage(0);
     setHasMore(true);
     await loadInitialData();

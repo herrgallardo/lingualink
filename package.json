@@ -18,7 +18,8 @@
     "test:realtime": "tsx scripts/test-realtime.ts",
     "troubleshoot": "tsx scripts/troubleshoot-realtime.ts",
     "fix-rls": "tsx scripts/run-fix-rls.ts",
-    "db:reset": "tsx scripts/reset-database.ts"
+    "db:reset": "tsx scripts/reset-database.ts",
+    "chat:test": "tsx scripts/test-chat.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

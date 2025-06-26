@@ -43,6 +43,7 @@ export default function ChatConversationPage() {
     deleteMessage,
     addReaction,
     loadMoreMessages,
+    refresh,
   } = useRealtimeChat({
     chatId,
     playMessageSound: true,
@@ -92,7 +93,7 @@ export default function ChatConversationPage() {
           <h2 className="text-xl font-semibold text-midnight-900 dark:text-slate-100 mb-2">
             {t('errors.loadingError')}
           </h2>
-          <p className="text-teal-700 dark:text-teal-400 mb-4">{error.message}</p>
+          <p className="text-teal-700 dark:text-teal-400 mb-4">{(error as Error).message}</p>
           <button
             onClick={() => router.push('/chat')}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
@@ -209,6 +210,72 @@ export default function ChatConversationPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Panel - Only in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-20 right-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-lg max-w-sm border border-slate-200 dark:border-slate-700">
+          <h3 className="font-bold mb-2 text-midnight-900 dark:text-slate-100">🐛 Debug Info</h3>
+          <div className="text-xs space-y-1 text-slate-600 dark:text-slate-400">
+            <p>
+              <strong>Chat ID:</strong> {chatId}
+            </p>
+            <p>
+              <strong>User ID:</strong> {user?.id}
+            </p>
+            <p>
+              <strong>Connected:</strong> {isConnected ? '✅' : '❌'}
+            </p>
+            <p>
+              <strong>Messages:</strong> {messages.length}
+            </p>
+            <p>
+              <strong>Participants:</strong> {participants.length}
+            </p>
+            <p>
+              <strong>Loading:</strong> {loading ? 'Yes' : 'No'}
+            </p>
+            <p>
+              <strong>Error:</strong> {error ? (error as Error).message : 'None'}
+            </p>
+          </div>
+          <div className="mt-3 space-y-2">
+            <button
+              onClick={() => {
+                console.log('📊 Current state:', {
+                  messages,
+                  participants,
+                  reactions,
+                  readReceipts,
+                  chatId,
+                  userId: user?.id,
+                  error: error ? (error as Error).message : null,
+                });
+              }}
+              className="w-full px-2 py-1 bg-cyan-500 text-white rounded text-xs hover:bg-cyan-600"
+            >
+              Log State to Console
+            </button>
+            <button
+              onClick={refresh}
+              className="w-full px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+            >
+              Refresh Data
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await sendMessage('Test message ' + new Date().toISOString());
+                } catch (error) {
+                  console.error('Test message failed:', error);
+                }
+              }}
+              className="w-full px-2 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600"
+            >
+              Send Test Message
+            </button>
           </div>
         </div>
       )}
